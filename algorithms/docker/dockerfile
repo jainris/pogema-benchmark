@@ -1,6 +1,6 @@
 FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
 
-ADD requirements.txt /tmp/
+ADD docker/requirements.txt /tmp/
 
 RUN apt update && apt install -y \
     build-essential \
@@ -28,3 +28,5 @@ RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.14.1/onnx
     
 # Clean up APT when done.
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+ADD . .
