@@ -58,7 +58,7 @@ def main():
 
     if args.expert_algorithm == "LaCAM":
         inference_config = LacamInferenceConfig(
-            lacam_lib_path="../algorithms/lacam/liblacam.so"
+            lacam_lib_path="lacam/liblacam.so"
         )
         expert_algorithm = LacamInference
     else:
