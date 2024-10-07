@@ -57,9 +57,7 @@ def main():
         raise ValueError(f"Unsupported map type: {args.map_type}.")
 
     if args.expert_algorithm == "LaCAM":
-        inference_config = LacamInferenceConfig(
-            lacam_lib_path="lacam/liblacam.so"
-        )
+        inference_config = LacamInferenceConfig()
         expert_algorithm = LacamInference
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
