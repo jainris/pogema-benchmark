@@ -96,8 +96,8 @@ def main():
     path = pathlib.Path(f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}")
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb"):
-        pickle.dump(dataset, path)
+    with open(path, "wb") as f:
+        pickle.dump(dataset, f)
 
 
 if __name__ == "__main__":
