@@ -63,7 +63,8 @@ def main():
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
 
     dataset = []
-    for grid_config in grid_configs:
+    for i, grid_config in enumerate(grid_configs):
+        print(f"Running expert on map {i + 1}/{args.num_samples}")
         expert = expert_algorithm(inference_config)
 
         env = pogema_v0(grid_config=grid_config)
