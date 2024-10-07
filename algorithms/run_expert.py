@@ -81,7 +81,7 @@ def main():
 
             observations, rewards, terminated, truncated, infos = env.step(actions)
 
-            if all(terminated):
+            if all(terminated) or all(truncated)::
                 break
 
         dataset.append((all_observations, all_actions))
