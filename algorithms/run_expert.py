@@ -91,7 +91,8 @@ def main():
     for key in sorted(dict_args.keys()):
         if key == "dataset_dir":
             continue
-        file_name += f"{key}_{dict_args[key]}"
+        file_name += f"_{key}_{dict_args[key]}"
+    file_name = file_name[1:] + ".pkl"
 
     path = pathlib.Path(f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}")
 
