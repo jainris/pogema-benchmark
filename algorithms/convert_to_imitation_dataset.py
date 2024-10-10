@@ -17,7 +17,7 @@ def generate_graph_dataset(
 
     for id, (sample_observations, actions) in enumerate(dataset):
         if print_prefix is not None:
-            print(f"{print_prefix}" f"Running expert on map {id + 1}/{num_samples}")
+            print(f"{print_prefix}" f"Generating Graph Dataset for map {id + 1}/{num_samples}")
         for observations in sample_observations:
             global_xys = np.array([obs["global_xy"] for obs in observations])
 
