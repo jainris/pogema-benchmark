@@ -7,14 +7,17 @@ import torch
 from scipy.spatial.distance import squareform, pdist
 
 
-def generate_graph_dataset(dataset, comm_radius, obs_radius):
+def generate_graph_dataset(
+    dataset, comm_radius, obs_radius, num_samples, print_prefix=""
+):
     dataset_node_features = []
     dataset_Adj = []
     dataset_target_actions = []
     graph_map_id = []
 
     for id, (sample_observations, actions) in enumerate(dataset):
-        # for observations, actions in zip(sample_observations, sample_actions):
+        if print_prefix is not None:
+            print(f"{print_prefix}" f"Running expert on map {id + 1}/{num_samples}")
         for observations in sample_observations:
             global_xys = np.array([obs["global_xy"] for obs in observations])
 
@@ -107,7 +110,9 @@ def main():
     with open(path, "rb") as f:
         dataset = pickle.load(f)
 
-    graph_dataset = generate_graph_dataset(dataset, args.comm_radius, args.obs_radius)
+    graph_dataset = generate_graph_dataset(
+        dataset, args.comm_radius, args.obs_radius, args.num_samples
+    )
 
     path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
 
