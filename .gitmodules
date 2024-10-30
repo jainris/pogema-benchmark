@@ -1,0 +1,3 @@
+[submodule "algorithms/magat_pathplanning"]
+	path = algorithms/magat_pathplanning
+	url = git@github.com:jainris/magat_pathplanning.git
