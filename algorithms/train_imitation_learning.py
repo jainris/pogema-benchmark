@@ -9,7 +9,7 @@ from pogema import pogema_v0, GridConfig
 
 from lacam.inference import LacamInference, LacamInferenceConfig
 
-sys.path.append("magat_pathplanning")
+sys.path.append("./magat_pathplanning")
 
 import torch
 import torch.nn as nn
@@ -541,6 +541,8 @@ def main():
     )
 
     best_validation_success_rate = 0.0
+    checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(args.num_epochs):
         total_loss = 0.0
