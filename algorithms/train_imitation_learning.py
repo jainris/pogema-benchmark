@@ -26,7 +26,6 @@ from convert_to_imitation_dataset import generate_graph_dataset
 
 DATASET_FILE_NAME_KEYS = [
     "expert_algorithm",
-    "imitation_learning_model",
     "map_type",
     "map_h",
     "map_w",
