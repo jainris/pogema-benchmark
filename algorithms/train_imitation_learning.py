@@ -404,6 +404,8 @@ def main():
     parser.add_argument("--max_episode_steps", type=int, default=128)
     parser.add_argument("--obs_radius", type=int, default=3)
 
+    parser.add_argument("--comm_radius", type=int, default=7)
+
     parser.add_argument("--num_samples", type=int, default=1000)
     parser.add_argument("--dataset_seed", type=int, default=42)
     parser.add_argument("--dataset_dir", type=str, default="dataset")
@@ -533,7 +535,7 @@ def main():
     # test_dataset = _divide_dataset(validation_id_max, torch.inf)
 
     # num_batches = (graph_dataset[0].shape[0] + args.batch_size - 1) // args.batch_size
-    num_batches = (train_dataset.shape[0] + args.batch_size - 1) // args.batch_size
+    num_batches = (train_dataset[0].shape[0] + args.batch_size - 1) // args.batch_size
 
     dataset_node_features, dataset_Adj, dataset_target_actions, graph_map_id = (
         train_dataset
