@@ -587,8 +587,8 @@ def main():
         )
 
         results = {
-            "train_loss": {total_loss / num_batches},
-            "train_accuracy": {tot_correct / num_samples},
+            "train_loss": total_loss / num_batches,
+            "train_accuracy": tot_correct / num_samples,
         }
         if epoch % args.validation_every_epochs == 0:
             model = model.eval()
