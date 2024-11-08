@@ -642,6 +642,7 @@ def main():
             print("Finshed Validation")
             print("------------------")
 
+        wandb.log(results)
     checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", f"last.pt")
     torch.save(model.state_dict(), checkpoint_path)
 
