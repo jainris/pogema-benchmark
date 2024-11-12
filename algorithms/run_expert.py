@@ -7,6 +7,20 @@ from pogema import pogema_v0, GridConfig
 
 from lacam.inference import LacamInference, LacamInferenceConfig
 
+DATASET_FILE_NAME_KEYS = [
+    "expert_algorithm",
+    "map_type",
+    "map_h",
+    "map_w",
+    "robot_density",
+    "obstacle_density",
+    "max_episode_steps",
+    "obs_radius",
+    "num_samples",
+    "dataset_seed",
+    "save_termination_state",
+]
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run Expert")
@@ -23,6 +37,10 @@ def main():
     parser.add_argument("--num_samples", type=int, default=1000)
     parser.add_argument("--dataset_seed", type=int, default=42)
     parser.add_argument("--dataset_dir", type=str, default="dataset")
+
+    parser.add_argument(
+        "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
+    )
 
     args = parser.parse_args()
     print(args)
@@ -72,6 +90,7 @@ def main():
 
         all_actions = []
         all_observations = []
+        all_terminated = []
 
         while True:
             actions = expert.act(observations)
@@ -81,16 +100,20 @@ def main():
 
             observations, rewards, terminated, truncated, infos = env.step(actions)
 
+            if args.save_termination_state:
+                all_terminated.append(terminated)
+
             if all(terminated) or all(truncated):
                 break
 
-        dataset.append((all_observations, all_actions))
+        if args.save_termination_state:
+            dataset.append((all_observations, all_actions, all_terminated))
+        else:
+            dataset.append((all_observations, all_actions))
 
     file_name = ""
     dict_args = vars(args)
-    for key in sorted(dict_args.keys()):
-        if key == "dataset_dir":
-            continue
+    for key in sorted(DATASET_FILE_NAME_KEYS):
         file_name += f"_{key}_{dict_args[key]}"
     file_name = file_name[1:] + ".pkl"
 

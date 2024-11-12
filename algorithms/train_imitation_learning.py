@@ -22,20 +22,7 @@ from torchsummaryX import summary
 from graphs.models.resnet_pytorch import *
 
 from convert_to_imitation_dataset import generate_graph_dataset
-
-
-DATASET_FILE_NAME_KEYS = [
-    "expert_algorithm",
-    "map_type",
-    "map_h",
-    "map_w",
-    "robot_density",
-    "obstacle_density",
-    "max_episode_steps",
-    "obs_radius",
-    "num_samples",
-    "dataset_seed",
-]
+from run_expert import DATASET_FILE_NAME_KEYS
 
 
 class DecentralPlannerGATNet(torch.nn.Module):
@@ -435,6 +422,10 @@ def main():
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--device", type=int, default=None)
 
+    parser.add_argument(
+        "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
+    )
+
     args = parser.parse_args()
     print(args)
 
@@ -527,7 +518,7 @@ def main():
     validation_id_max = train_id_max + int(args.num_samples * args.validation_fraction)
 
     def _divide_dataset(start, end):
-        mask = torch.logical_and(graph_dataset[3] >= start, graph_dataset[3] < end)
+        mask = torch.logical_and(graph_dataset[-1] >= start, graph_dataset[-1] < end)
         return tuple(gd[mask] for gd in graph_dataset)
 
     train_dataset = _divide_dataset(0, train_id_max)
@@ -537,9 +528,13 @@ def main():
     # num_batches = (graph_dataset[0].shape[0] + args.batch_size - 1) // args.batch_size
     num_batches = (train_dataset[0].shape[0] + args.batch_size - 1) // args.batch_size
 
-    dataset_node_features, dataset_Adj, dataset_target_actions, graph_map_id = (
-        train_dataset
-    )
+    (
+        dataset_node_features,
+        dataset_Adj,
+        dataset_target_actions,
+        dataset_terminated,
+        graph_map_id,
+    ) = train_dataset
 
     best_validation_success_rate = 0.0
     checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
@@ -558,15 +553,25 @@ def main():
             cur_adj = dataset_Adj[i * args.batch_size : (i + 1) * args.batch_size].to(
                 device
             )
-            cur_target_actions = dataset_target_actions[
-                i * args.batch_size : (i + 1) * args.batch_size
-            ].to(device)
+            cur_target_actions = (
+                dataset_target_actions[i * args.batch_size : (i + 1) * args.batch_size]
+                .to(device)
+                .reshape(-1)
+            )
+            cur_terminated = (
+                dataset_terminated[i * args.batch_size : (i + 1) * args.batch_size]
+                .to(device)
+                .reshape(-1)
+            )
 
             optimizer.zero_grad()
 
             model.addGSO(cur_adj, device)
             out = model(cur_node_features, device)
-            loss = loss_function(out, cur_target_actions.reshape(-1))
+
+            out = out[cur_terminated]
+            cur_target_actions = cur_target_actions[cur_terminated]
+            loss = loss_function(out, cur_target_actions)
 
             total_loss += loss.item()
 
@@ -574,7 +579,7 @@ def main():
             optimizer.step()
 
             tot_correct += (
-                torch.sum(torch.argmax(out, dim=-1) == cur_target_actions.reshape(-1))
+                torch.sum(torch.argmax(out, dim=-1) == cur_target_actions)
                 .detach()
                 .cpu()
             )

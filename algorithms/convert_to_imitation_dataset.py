@@ -6,18 +6,31 @@ import torch
 
 from scipy.spatial.distance import squareform, pdist
 
+from run_expert import DATASET_FILE_NAME_KEYS
+
 
 def generate_graph_dataset(
-    dataset, comm_radius, obs_radius, num_samples, print_prefix=""
+    dataset,
+    comm_radius,
+    obs_radius,
+    num_samples,
+    save_termination_state,
+    print_prefix="",
 ):
     dataset_node_features = []
     dataset_Adj = []
     dataset_target_actions = []
+    dataset_terminated = []
     graph_map_id = []
 
-    for id, (sample_observations, actions) in enumerate(dataset):
+    assert save_termination_state, "Only support saving termination state for now"
+
+    for id, (sample_observations, actions, terminated) in enumerate(dataset):
         if print_prefix is not None:
-            print(f"{print_prefix}" f"Generating Graph Dataset for map {id + 1}/{num_samples}")
+            print(
+                f"{print_prefix}"
+                f"Generating Graph Dataset for map {id + 1}/{num_samples}"
+            )
         for observations in sample_observations:
             global_xys = np.array([obs["global_xy"] for obs in observations])
 
@@ -63,13 +76,21 @@ def generate_graph_dataset(
             dataset_Adj.append(Adj)
             graph_map_id.append(id)
         dataset_target_actions.extend(actions)
+        dataset_terminated.extend(terminated)
 
     dataset_node_features = np.stack(dataset_node_features)
     dataset_Adj = np.stack(dataset_Adj)
     dataset_target_actions = np.stack(dataset_target_actions)
+    dataset_terminated = np.stack(dataset_terminated)
     graph_map_id = np.array(graph_map_id)
 
-    result = (dataset_node_features, dataset_Adj, dataset_target_actions, graph_map_id)
+    result = (
+        dataset_node_features,
+        dataset_Adj,
+        dataset_target_actions,
+        dataset_terminated,
+        graph_map_id,
+    )
 
     return tuple(torch.from_numpy(res) for res in result)
 
@@ -93,14 +114,16 @@ def main():
     parser.add_argument("--dataset_seed", type=int, default=42)
     parser.add_argument("--dataset_dir", type=str, default="dataset")
 
+    parser.add_argument(
+        "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
+    )
+
     args = parser.parse_args()
     print(args)
 
     file_name = ""
     dict_args = vars(args)
-    for key in sorted(dict_args.keys()):
-        if key in ["dataset_dir", "comm_radius", "dynamic_comm_radius"]:
-            continue
+    for key in sorted(DATASET_FILE_NAME_KEYS):
         file_name += f"_{key}_{dict_args[key]}"
     file_name = file_name[1:] + ".pkl"
 
@@ -111,7 +134,11 @@ def main():
         dataset = pickle.load(f)
 
     graph_dataset = generate_graph_dataset(
-        dataset, args.comm_radius, args.obs_radius, args.num_samples
+        dataset,
+        args.comm_radius,
+        args.obs_radius,
+        args.num_samples,
+        args.save_termination_state,
     )
 
     path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
