@@ -109,6 +109,7 @@ def main():
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
 
     dataset = []
+    num_success = 0
     for i, grid_config in enumerate(grid_configs):
         print(f"Running expert on map {i + 1}/{args.num_samples}")
         expert = expert_algorithm(inference_config)
@@ -118,6 +119,9 @@ def main():
             grid_config=grid_config,
             save_termination_state=args.save_termination_state,
         )
+
+        if all(all_terminated[-1]):
+            num_success += 1
 
         if args.save_termination_state:
             dataset.append((all_observations, all_actions, all_terminated))

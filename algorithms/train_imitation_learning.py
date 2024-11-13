@@ -423,6 +423,7 @@ def main():
     parser.add_argument("--device", type=int, default=None)
     parser.add_argument("--initial_val_size", type=int, default=128)
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
+    parser.add_argument("--num_run_oe", type=int, default=500)
 
     parser.add_argument(
         "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
