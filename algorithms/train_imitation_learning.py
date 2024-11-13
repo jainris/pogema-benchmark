@@ -390,6 +390,7 @@ def main():
     parser.add_argument("--obstacle_density", type=float, default=0.1)
     parser.add_argument("--max_episode_steps", type=int, default=128)
     parser.add_argument("--obs_radius", type=int, default=3)
+    parser.add_argument("--collision_system", type=str, default="soft")
 
     parser.add_argument("--comm_radius", type=int, default=7)
 
@@ -465,6 +466,7 @@ def main():
                 max_episode_steps=args.max_episode_steps,  # horizon
                 obs_radius=args.obs_radius,  # defines field of view
                 observation_type="MAPF",
+                collision_system=args.collision_system,
             )
             grid_configs.append(grid_config)
     else:
