@@ -22,7 +22,7 @@ from torchsummaryX import summary
 from graphs.models.resnet_pytorch import *
 
 from convert_to_imitation_dataset import generate_graph_dataset
-from run_expert import DATASET_FILE_NAME_KEYS
+from run_expert import DATASET_FILE_NAME_KEYS, run_expert_algorithm
 
 
 class DecentralPlannerGATNet(torch.nn.Module):
@@ -421,6 +421,8 @@ def main():
 
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--device", type=int, default=None)
+    parser.add_argument("--initial_val_size", type=int, default=128)
+    parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
 
     parser.add_argument(
         "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
@@ -428,6 +430,8 @@ def main():
 
     args = parser.parse_args()
     print(args)
+
+    assert args.save_termination_state
 
     if args.device == -1:
         device = torch.device("cuda")
@@ -540,12 +544,41 @@ def main():
     checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
+    cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
+
+    oe_graph_dataset = None
+
+    def run_model_on_grid(grid_config):
+        env = pogema_v0(grid_config=grid_config)
+        observations, infos = env.reset()
+
+        while True:
+            gdata = generate_graph_dataset(
+                [[[observations], [0], [0]]],
+                args.comm_radius,
+                args.obs_radius,
+                None,
+                True,
+                None,
+            )
+
+            model.addGSO(gdata[1].to(device), device)
+            actions = model(gdata[0].to(device), device)
+            actions = torch.argmax(actions, dim=-1).detach().cpu()
+
+            observations, rewards, terminated, truncated, infos = env.step(actions)
+
+            if all(terminated) or all(truncated):
+                break
+        return all(terminated), env, observations
+
     for epoch in range(args.num_epochs):
         total_loss = 0.0
         tot_correct = 0
         num_samples = 0
 
         model = model.train()
+        n_batches = num_batches
         for i in range(num_batches):
             cur_node_features = dataset_node_features[
                 i * args.batch_size : (i + 1) * args.batch_size
@@ -585,14 +618,65 @@ def main():
             )
             num_samples += out.shape[0]
 
+        if oe_graph_dataset is not None:
+            oe_num_batches = (oe_graph_dataset[0].shape[0] + args.batch_size - 1) // args.batch_size
+            n_batches += oe_num_batches
+
+            (
+                oe_node_features,
+                oe_Adj,
+                oe_target_actions,
+                oe_terminated,
+                _,
+            ) = oe_graph_dataset
+
+            for i in range(num_batches):
+                cur_node_features = oe_node_features[
+                    i * args.batch_size : (i + 1) * args.batch_size
+                ].to(device)
+                cur_adj = oe_Adj[i * args.batch_size : (i + 1) * args.batch_size].to(
+                    device
+                )
+                cur_target_actions = (
+                    oe_target_actions[i * args.batch_size : (i + 1) * args.batch_size]
+                    .to(device)
+                    .reshape(-1)
+                )
+                cur_terminated = (
+                    oe_terminated[i * args.batch_size : (i + 1) * args.batch_size]
+                    .to(device)
+                    .reshape(-1)
+                )
+
+                optimizer.zero_grad()
+
+                model.addGSO(cur_adj, device)
+                out = model(cur_node_features, device)
+
+                out = out[cur_terminated]
+                cur_target_actions = cur_target_actions[cur_terminated]
+                loss = loss_function(out, cur_target_actions)
+
+                total_loss += loss.item()
+
+                loss.backward()
+                optimizer.step()
+
+                tot_correct += (
+                    torch.sum(torch.argmax(out, dim=-1) == cur_target_actions)
+                    .detach()
+                    .cpu()
+                )
+                num_samples += out.shape[0]
+
         lr_scheduler.step()
 
         print(
-            f"Epoch {epoch}, Mean Loss: {total_loss / num_batches}, Mean Accuracy: {tot_correct / num_samples}"
+            f"Epoch {epoch}, Mean Loss: {total_loss / n_batches}, Mean Accuracy: {tot_correct / num_samples}"
         )
 
         results = {
-            "train_loss": total_loss / num_batches,
+            "train_loss": total_loss / n_batches,
             "train_accuracy": tot_correct / num_samples,
         }
         if epoch % args.validation_every_epochs == 0:
@@ -603,32 +687,10 @@ def main():
             print("-------------------")
             print("Starting Validation")
 
-            for graph_id in range(train_id_max, validation_id_max):
-                grid_config = grid_configs[graph_id]
+            for graph_id in range(train_id_max, cur_validation_id_max):
+                success, env, observations = run_model_on_grid(grid_configs[graph_id])
 
-                env = pogema_v0(grid_config=grid_config)
-                observations, infos = env.reset()
-
-                while True:
-                    gdata = generate_graph_dataset(
-                        [[[observations], [0]]],
-                        args.comm_radius,
-                        args.obs_radius,
-                        None,
-                        None,
-                    )
-
-                    model.addGSO(gdata[1].to(device), device)
-                    actions = model(gdata[0].to(device), device)
-                    actions = torch.argmax(actions, dim=-1).detach().cpu()
-
-                    observations, rewards, terminated, truncated, infos = env.step(
-                        actions
-                    )
-
-                    if all(terminated) or all(truncated):
-                        break
-                if all(terminated):
+                if success:
                     num_completed += 1
                 print(
                     f"Validation Graph {graph_id - train_id_max}/{validation_id_max - train_id_max}, "
@@ -644,11 +706,71 @@ def main():
                 torch.save(model.state_dict(), checkpoint_path)
 
             if success_rate > best_validation_success_rate:
+                if success_rate >= args.threshold_val_success_rate:
+                    print("Success rate passed threshold -- Increasing Validation Size")
+                    args.threshold_val_success_rate = 1.1
+                    cur_validation_id_max = validation_id_max
                 checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
                 torch.save(model.state_dict(), checkpoint_path)
 
             print("Finshed Validation")
             print("------------------")
+
+            print("---------------------")
+            print("Running Online Expert")
+
+            oe_graph_dataset = None
+
+            if args.run_online_expert and epoch > 0:
+                oe_ids = torch.randint(
+                    low=0, high=train_id_max, size=(args.num_run_oe,)
+                )
+
+                oe_dataset = []
+
+                for graph_id in oe_ids:
+                    success, env, observations = run_model_on_grid(
+                        grid_configs[graph_id]
+                    )
+
+                    if not success:
+                        env.grid_config.persistent = True
+                        env.set_elapsed_steps(0)
+                        env.grid_config.persistent = False
+
+                        expert = expert_algorithm(inference_config)
+
+                        all_actions, all_observations, all_terminated = (
+                            run_expert_algorithm(
+                                expert,
+                                env=env,
+                                observations=observations,
+                                save_termination_state=args.save_termination_state,
+                            )
+                        )
+
+                        oe_dataset.append((all_observations, all_actions, all_terminated))
+                if len(oe_dataset) > 0:
+                    new_oe_graph_dataset = generate_graph_dataset(
+                        oe_dataset,
+                        args.comm_radius,
+                        args.obs_radius,
+                        None,
+                        True,
+                        None,
+                    )
+
+                    if oe_graph_dataset is None:
+                        oe_graph_dataset = new_oe_graph_dataset
+                    else:
+                        oe_graph_dataset = tuple(
+                            torch.concat(
+                                [oe_graph_dataset[i], new_oe_graph_dataset[i]], dim=0
+                            )
+                            for i in range(len(oe_graph_dataset))
+                        )
+            print("Finished Online Expert")
+            print("----------------------")
 
         wandb.log(results)
     checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", f"last.pt")

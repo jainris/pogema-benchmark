@@ -22,6 +22,34 @@ DATASET_FILE_NAME_KEYS = [
 ]
 
 
+def run_expert_algorithm(
+    expert, env=None, observations=None, grid_config=None, save_termination_state=True
+):
+    if env is None:
+        env = pogema_v0(grid_config=grid_config)
+        observations, infos = env.reset()
+
+    all_actions = []
+    all_observations = []
+    all_terminated = []
+
+    while True:
+        actions = expert.act(observations)
+
+        all_observations.append(observations)
+        all_actions.append(actions)
+
+        observations, rewards, terminated, truncated, infos = env.step(actions)
+
+        if save_termination_state:
+            all_terminated.append(terminated)
+
+        if all(terminated) or all(truncated):
+            break
+
+    return all_actions, all_observations, all_terminated
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run Expert")
     parser.add_argument("--expert_algorithm", type=str, default="LaCAM")
@@ -85,26 +113,11 @@ def main():
         print(f"Running expert on map {i + 1}/{args.num_samples}")
         expert = expert_algorithm(inference_config)
 
-        env = pogema_v0(grid_config=grid_config)
-        observations, infos = env.reset()
-
-        all_actions = []
-        all_observations = []
-        all_terminated = []
-
-        while True:
-            actions = expert.act(observations)
-
-            all_observations.append(observations)
-            all_actions.append(actions)
-
-            observations, rewards, terminated, truncated, infos = env.step(actions)
-
-            if args.save_termination_state:
-                all_terminated.append(terminated)
-
-            if all(terminated) or all(truncated):
-                break
+        all_actions, all_observations, all_terminated = run_expert_algorithm(
+            expert,
+            grid_config=grid_config,
+            save_termination_state=args.save_termination_state,
+        )
 
         if args.save_termination_state:
             dataset.append((all_observations, all_actions, all_terminated))
