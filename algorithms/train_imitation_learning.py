@@ -656,8 +656,8 @@ def main():
                 model.addGSO(cur_adj, device)
                 out = model(cur_node_features, device)
 
-                out = out[cur_terminated]
-                cur_target_actions = cur_target_actions[cur_terminated]
+                out = out[~cur_terminated]
+                cur_target_actions = cur_target_actions[~cur_terminated]
                 loss = loss_function(out, cur_target_actions)
 
                 total_loss += loss.item()
@@ -682,7 +682,7 @@ def main():
             "train_loss": total_loss / n_batches,
             "train_accuracy": tot_correct / num_samples,
         }
-        if epoch % args.validation_every_epochs == 0:
+        if (epoch + 1) % args.validation_every_epochs == 0:
             model = model.eval()
 
             num_completed = 0
@@ -719,12 +719,12 @@ def main():
             print("Finshed Validation")
             print("------------------")
 
-            print("---------------------")
-            print("Running Online Expert")
-
             oe_graph_dataset = None
 
-            if args.run_online_expert and epoch > 0:
+            if args.run_online_expert:
+                print("---------------------")
+                print("Running Online Expert")
+
                 oe_ids = torch.randint(
                     low=0, high=train_id_max, size=(args.num_run_oe,)
                 )
@@ -772,8 +772,8 @@ def main():
                             )
                             for i in range(len(oe_graph_dataset))
                         )
-            print("Finished Online Expert")
-            print("----------------------")
+                print("Finished Online Expert")
+                print("----------------------")
 
         wandb.log(results)
     checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", f"last.pt")
