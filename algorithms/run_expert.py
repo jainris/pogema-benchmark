@@ -20,7 +20,31 @@ DATASET_FILE_NAME_KEYS = [
     "dataset_seed",
     "save_termination_state",
     "collision_system",
+    "on_target"
 ]
+
+def add_expert_dataset_args(parser):
+    parser.add_argument("--expert_algorithm", type=str, default="LaCAM")
+
+    parser.add_argument("--map_type", type=str, default="RandomGrid")
+    parser.add_argument("--map_h", type=int, default=20)
+    parser.add_argument("--map_w", type=int, default=20)
+    parser.add_argument("--robot_density", type=float, default=0.025)
+    parser.add_argument("--obstacle_density", type=float, default=0.1)
+    parser.add_argument("--max_episode_steps", type=int, default=128)
+    parser.add_argument("--obs_radius", type=int, default=3)
+    parser.add_argument("--collision_system", type=str, default="soft")
+    parser.add_argument("--on_target", type=str, default="nothing")
+
+    parser.add_argument("--num_samples", type=int, default=1000)
+    parser.add_argument("--dataset_seed", type=int, default=42)
+    parser.add_argument("--dataset_dir", type=str, default="dataset")
+
+    parser.add_argument(
+        "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
+    )
+
+    return parser
 
 
 def run_expert_algorithm(
@@ -53,24 +77,7 @@ def run_expert_algorithm(
 
 def main():
     parser = argparse.ArgumentParser(description="Run Expert")
-    parser.add_argument("--expert_algorithm", type=str, default="LaCAM")
-
-    parser.add_argument("--map_type", type=str, default="RandomGrid")
-    parser.add_argument("--map_h", type=int, default=20)
-    parser.add_argument("--map_w", type=int, default=20)
-    parser.add_argument("--robot_density", type=float, default=0.025)
-    parser.add_argument("--obstacle_density", type=float, default=0.1)
-    parser.add_argument("--max_episode_steps", type=int, default=128)
-    parser.add_argument("--obs_radius", type=int, default=3)
-    parser.add_argument("--collision_system", type=str, default="soft")
-
-    parser.add_argument("--num_samples", type=int, default=1000)
-    parser.add_argument("--dataset_seed", type=int, default=42)
-    parser.add_argument("--dataset_dir", type=str, default="dataset")
-
-    parser.add_argument(
-        "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
-    )
+    parser = add_expert_dataset_args(parser)
 
     args = parser.parse_args()
     print(args)
@@ -100,6 +107,7 @@ def main():
                 obs_radius=args.obs_radius,  # defines field of view
                 observation_type="MAPF",
                 collision_system=args.collision_system,
+                on_target=args.on_target,
             )
             grid_configs.append(grid_config)
     else:

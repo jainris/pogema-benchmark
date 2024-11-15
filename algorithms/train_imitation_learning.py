@@ -22,7 +22,11 @@ from torchsummaryX import summary
 from graphs.models.resnet_pytorch import *
 
 from convert_to_imitation_dataset import generate_graph_dataset
-from run_expert import DATASET_FILE_NAME_KEYS, run_expert_algorithm
+from run_expert import (
+    DATASET_FILE_NAME_KEYS,
+    run_expert_algorithm,
+    add_expert_dataset_args,
+)
 
 
 class DecentralPlannerGATNet(torch.nn.Module):
@@ -380,23 +384,10 @@ class DecentralPlannerGATNet(torch.nn.Module):
 
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
-    parser.add_argument("--expert_algorithm", type=str, default="LaCAM")
+    parser = add_expert_dataset_args(parser)
     parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
 
-    parser.add_argument("--map_type", type=str, default="RandomGrid")
-    parser.add_argument("--map_h", type=int, default=20)
-    parser.add_argument("--map_w", type=int, default=20)
-    parser.add_argument("--robot_density", type=float, default=0.025)
-    parser.add_argument("--obstacle_density", type=float, default=0.1)
-    parser.add_argument("--max_episode_steps", type=int, default=128)
-    parser.add_argument("--obs_radius", type=int, default=3)
-    parser.add_argument("--collision_system", type=str, default="soft")
-
     parser.add_argument("--comm_radius", type=int, default=7)
-
-    parser.add_argument("--num_samples", type=int, default=1000)
-    parser.add_argument("--dataset_seed", type=int, default=42)
-    parser.add_argument("--dataset_dir", type=str, default="dataset")
 
     parser.add_argument("--validation_fraction", type=float, default=0.15)
     parser.add_argument("--test_fraction", type=float, default=0.15)
@@ -425,10 +416,6 @@ def main():
     parser.add_argument("--initial_val_size", type=int, default=128)
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
     parser.add_argument("--num_run_oe", type=int, default=500)
-
-    parser.add_argument(
-        "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
-    )
 
     args = parser.parse_args()
     print(args)
@@ -467,6 +454,7 @@ def main():
                 obs_radius=args.obs_radius,  # defines field of view
                 observation_type="MAPF",
                 collision_system=args.collision_system,
+                on_target=args.on_target,
             )
             grid_configs.append(grid_config)
     else:
@@ -642,7 +630,9 @@ def main():
             num_samples += out.shape[0]
 
         if oe_graph_dataset is not None:
-            oe_num_batches = (oe_graph_dataset[0].shape[0] + args.batch_size - 1) // args.batch_size
+            oe_num_batches = (
+                oe_graph_dataset[0].shape[0] + args.batch_size - 1
+            ) // args.batch_size
             n_batches += oe_num_batches
 
             (
@@ -780,7 +770,9 @@ def main():
                             )
                         )
 
-                        oe_dataset.append((all_observations, all_actions, all_terminated))
+                        oe_dataset.append(
+                            (all_observations, all_actions, all_terminated)
+                        )
                 if len(oe_dataset) > 0:
                     new_oe_graph_dataset = generate_graph_dataset(
                         oe_dataset,
