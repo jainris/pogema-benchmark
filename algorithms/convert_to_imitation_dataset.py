@@ -46,7 +46,14 @@ def generate_graph_dataset(
 
                 obs_goal = np.zeros_like(obs_obstacle)
                 centre = (obs_goal.shape[0] // 2, obs_goal.shape[1] // 2)
-                goal = observation["target_xy"]
+                # goal = observation["target_xy"]
+                # goal = np.array(observation['global_target_xy']) - np.array(observation['global_xy'])
+                goal = tuple(
+                    (tpos - apos)
+                    for tpos, apos in zip(
+                        observation["global_target_xy"], observation["global_xy"]
+                    )
+                )
 
                 if np.all(np.abs(goal) <= obs_radius):
                     obs_goal[centre[0] + goal[0], centre[1] + goal[1]] = 1.0
