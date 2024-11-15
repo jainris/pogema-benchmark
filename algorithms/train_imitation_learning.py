@@ -551,28 +551,48 @@ def main():
 
     oe_graph_dataset = None
 
-    def run_model_on_grid(grid_config):
+    def run_model_on_grid(grid_config, max_episodes=None):
         env = pogema_v0(grid_config=grid_config)
         observations, infos = env.reset()
 
-        while True:
-            gdata = generate_graph_dataset(
-                [[[observations], [0], [0]]],
-                args.comm_radius,
-                args.obs_radius,
-                None,
-                True,
-                None,
-            )
+        if max_episodes is None:
+            while True:
+                gdata = generate_graph_dataset(
+                    [[[observations], [0], [0]]],
+                    args.comm_radius,
+                    args.obs_radius,
+                    None,
+                    True,
+                    None,
+                )
 
-            model.addGSO(gdata[1].to(device), device)
-            actions = model(gdata[0].to(device), device)
-            actions = torch.argmax(actions, dim=-1).detach().cpu()
+                model.addGSO(gdata[1].to(device), device)
+                actions = model(gdata[0].to(device), device)
+                actions = torch.argmax(actions, dim=-1).detach().cpu()
 
-            observations, rewards, terminated, truncated, infos = env.step(actions)
+                observations, rewards, terminated, truncated, infos = env.step(actions)
 
-            if all(terminated) or all(truncated):
-                break
+                if all(terminated) or all(truncated):
+                    break
+        else:
+            for _ in range(max_episodes):
+                gdata = generate_graph_dataset(
+                    [[[observations], [0], [0]]],
+                    args.comm_radius,
+                    args.obs_radius,
+                    None,
+                    True,
+                    None,
+                )
+
+                model.addGSO(gdata[1].to(device), device)
+                actions = model(gdata[0].to(device), device)
+                actions = torch.argmax(actions, dim=-1).detach().cpu()
+
+                observations, rewards, terminated, truncated, infos = env.step(actions)
+
+                if all(terminated) or all(truncated):
+                    break
         return all(terminated), env, observations
 
     for epoch in range(args.num_epochs):
@@ -732,15 +752,23 @@ def main():
                 oe_dataset = []
 
                 for graph_id in oe_ids:
+                    grid_config = GridConfig(
+                        num_agents=num_agents,  # number of agents
+                        size=args.map_w,  # size of the grid
+                        density=args.obstacle_density,  # obstacle density
+                        seed=seeds[graph_id],  # set to None for random
+                        # obstacles, agents and targets
+                        # positions at each reset
+                        max_episode_steps=2 * args.max_episode_steps,  # horizon
+                        obs_radius=args.obs_radius,  # defines field of view
+                        observation_type="MAPF",
+                        collision_system=args.collision_system,
+                    )
                     success, env, observations = run_model_on_grid(
-                        grid_configs[graph_id]
+                        grid_configs[graph_id], args.max_episode_steps
                     )
 
                     if not success:
-                        env.grid_config.persistent = True
-                        env.set_elapsed_steps(0)
-                        env.grid_config.persistent = False
-
                         expert = expert_algorithm(inference_config)
 
                         all_actions, all_observations, all_terminated = (
