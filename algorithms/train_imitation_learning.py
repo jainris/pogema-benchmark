@@ -625,8 +625,8 @@ def main():
             model.addGSO(cur_adj, device)
             out = model(cur_node_features, device)
 
-            out = out[cur_terminated]
-            cur_target_actions = cur_target_actions[cur_terminated]
+            out = out[~cur_terminated]
+            cur_target_actions = cur_target_actions[~cur_terminated]
             loss = loss_function(out, cur_target_actions)
 
             total_loss += loss.item()
