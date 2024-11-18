@@ -729,8 +729,6 @@ def main():
             print("Finshed Validation")
             print("------------------")
 
-            oe_graph_dataset = None
-
             if args.run_online_expert:
                 print("---------------------")
                 print("Running Online Expert")
@@ -755,7 +753,7 @@ def main():
                         collision_system=args.collision_system,
                     )
                     success, env, observations = run_model_on_grid(
-                        grid_configs[graph_id], args.max_episode_steps
+                        grid_config, args.max_episode_steps
                     )
 
                     if not success:
