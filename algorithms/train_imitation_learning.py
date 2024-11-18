@@ -733,9 +733,8 @@ def main():
                 print("---------------------")
                 print("Running Online Expert")
 
-                oe_ids = torch.randint(
-                    low=0, high=train_id_max, size=(args.num_run_oe,)
-                )
+                rng = np.random.default_rng(args.dataset_seed + epoch + 1)
+                oe_ids = rng.integers(train_id_max, size=args.num_run_oe)
 
                 oe_dataset = []
 

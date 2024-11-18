@@ -20,7 +20,8 @@ RUN apt update && apt install -y \
     cmake \
     g++ \
     wget \
-    libboost-all-dev
+    libboost-all-dev \
+    gdb
 
 RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.14.1/onnxruntime-linux-x64-1.14.1.tgz \
     && tar -xf onnxruntime-linux-x64-1.14.1.tgz \
