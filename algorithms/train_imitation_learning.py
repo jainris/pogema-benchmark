@@ -5,6 +5,8 @@ import numpy as np
 import sys
 import wandb
 
+from multiprocessing import Process, Queue
+
 from pogema import pogema_v0, GridConfig
 
 from lacam.inference import LacamInference, LacamInferenceConfig
@@ -583,6 +585,19 @@ def main():
                     break
         return all(terminated), env, observations
 
+    def multiprocess_run_expert(
+        queue, expert, env, observations, save_termination_state
+    ):
+        all_actions, all_observations, all_terminated = run_expert_algorithm(
+            expert,
+            env=env,
+            observations=observations,
+            save_termination_state=save_termination_state,
+        )
+        queue.put((all_actions, all_observations, all_terminated))
+
+    queue = Queue()
+
     for epoch in range(args.num_epochs):
         total_loss = 0.0
         tot_correct = 0
@@ -709,7 +724,7 @@ def main():
                     f"Validation Graph {graph_id - train_id_max}/{validation_id_max - train_id_max}, "
                     f"Current Success Rate: {num_completed / (graph_id - train_id_max + 1)}"
                 )
-            success_rate = num_completed / (validation_id_max - train_id_max)
+            success_rate = num_completed / (graph_id - train_id_max)
             results = results | {"validation_success_rate": success_rate}
 
             if args.save_intmd_checkpoints:
@@ -758,19 +773,42 @@ def main():
                     if not success:
                         expert = expert_algorithm(inference_config)
 
-                        all_actions, all_observations, all_terminated = (
-                            run_expert_algorithm(
+                        p = Process(
+                            target=multiprocess_run_expert,
+                            args=(
+                                queue,
                                 expert,
-                                env=env,
-                                observations=observations,
-                                save_termination_state=args.save_termination_state,
-                            )
+                                env,
+                                observations,
+                                args.save_termination_state,
+                            ),
                         )
+                        p.start()
 
-                        oe_dataset.append(
-                            (all_observations, all_actions, all_terminated)
-                        )
+                        all_actions, all_observations, all_terminated = None, None, None
+                        while True:
+                            try:
+                                all_actions, all_observations, all_terminated = (
+                                    queue.get(timeout=3)
+                                )
+                                p.join()
+                                break
+                            except:
+                                p.join(timeout=0.5)
+                                if p.exitcode is not None:
+                                    break
+
+                        if all_actions is not None:
+                            oe_dataset.append(
+                                (all_observations, all_actions, all_terminated)
+                            )
+                while queue.qsize() > 0:
+                    # Popping remaining elements, although no elements should remain
+                    all_actions, all_observations, all_terminated = queue.get()
+                    oe_dataset.append((all_observations, all_actions, all_terminated))
+
                 if len(oe_dataset) > 0:
+                    print(f"Adding {len(oe_dataset)} OE grids to the dataset")
                     new_oe_graph_dataset = generate_graph_dataset(
                         oe_dataset,
                         args.comm_radius,
