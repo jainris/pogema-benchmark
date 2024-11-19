@@ -418,6 +418,7 @@ def main():
     parser.add_argument("--initial_val_size", type=int, default=128)
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
     parser.add_argument("--num_run_oe", type=int, default=500)
+    parser.add_argument("--run_oe_after", type=int, default=0)
 
     args = parser.parse_args()
     print(args)
@@ -744,7 +745,7 @@ def main():
             print("Finshed Validation")
             print("------------------")
 
-            if args.run_online_expert:
+            if args.run_online_expert and args.run_oe_after:
                 print("---------------------")
                 print("Running Online Expert")
 
