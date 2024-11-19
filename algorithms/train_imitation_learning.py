@@ -658,7 +658,7 @@ def main():
                 _,
             ) = oe_graph_dataset
 
-            for i in range(num_batches):
+            for i in range(oe_num_batches):
                 cur_node_features = oe_node_features[
                     i * args.batch_size : (i + 1) * args.batch_size
                 ].to(device)
@@ -799,9 +799,10 @@ def main():
                                     break
 
                         if all_actions is not None:
-                            oe_dataset.append(
-                                (all_observations, all_actions, all_terminated)
-                            )
+                            if all(all_terminated[-1]):
+                                oe_dataset.append(
+                                    (all_observations, all_actions, all_terminated)
+                                )
                 while queue.qsize() > 0:
                     # Popping remaining elements, although no elements should remain
                     all_actions, all_observations, all_terminated = queue.get()
