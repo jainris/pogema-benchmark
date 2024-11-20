@@ -745,7 +745,7 @@ def main():
             print("Finshed Validation")
             print("------------------")
 
-            if args.run_online_expert and args.run_oe_after:
+            if args.run_online_expert and (epoch + 1 >= args.run_oe_after):
                 print("---------------------")
                 print("Running Online Expert")
 
