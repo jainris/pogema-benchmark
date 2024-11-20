@@ -766,6 +766,7 @@ def main():
                         obs_radius=args.obs_radius,  # defines field of view
                         observation_type="MAPF",
                         collision_system=args.collision_system,
+                        on_target=args.on_target,
                     )
                     success, env, observations = run_model_on_grid(
                         grid_config, args.max_episode_steps
