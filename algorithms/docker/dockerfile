@@ -24,7 +24,7 @@ RUN apt update && apt install -y \
     gdb
 
 RUN pip install torch_geometric \
-    && pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-1.13.1+cu117.html
+    && pip install pyg_lib==0.4.0 torch-scatter==2.1.1 torch_sparse==0.6.17 torch_spline_conv==1.2.2 torch_cluster==1.6.1 -f https://pytorch-geometric.com/whl/torch-1.13.1+cu116.html
 
 RUN wget https://github.com/microsoft/onnxruntime/releases/download/v1.14.1/onnxruntime-linux-x64-1.14.1.tgz \
     && tar -xf onnxruntime-linux-x64-1.14.1.tgz \
