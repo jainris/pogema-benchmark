@@ -30,7 +30,7 @@ from run_expert import (
     run_expert_algorithm,
     add_expert_dataset_args,
 )
-from algorithms.imitation_dataset_pyg import convert_dense_graph_dataset_to_sparse_pyg_dataset
+from imitation_dataset_pyg import convert_dense_graph_dataset_to_sparse_pyg_dataset
 
 
 def GNNFactory(in_channels, out_channels, attentionMode, num_attention_heads):
@@ -40,6 +40,8 @@ def GNNFactory(in_channels, out_channels, attentionMode, num_attention_heads):
             out_channels=out_channels,
             heads=num_attention_heads,
         )
+    else:
+        raise ValueError(f"Currently, we don't support attention mode: {attentionMode}")
 
 
 class CNN(torch.nn.Module):
@@ -58,6 +60,8 @@ class CNN(torch.nn.Module):
         numMaxPoolStride,
         embedding_sizes,
     ):
+        super().__init__()
+
         convs = []
         batch_norms = []
         numConv = len(numChannel) - 1
@@ -290,6 +294,7 @@ def main():
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
     parser.add_argument("--num_run_oe", type=int, default=500)
     parser.add_argument("--run_oe_after", type=int, default=0)
+    parser.add_argument("--attention_mode", type=str, default="GAT_modified")
 
     args = parser.parse_args()
     print(args)
@@ -344,11 +349,10 @@ def main():
         model = DecentralPlannerGATNet(
             FOV=args.obs_radius,
             numInputFeatures=args.embedding_size,
-            nGraphFilterTaps=args.num_gnn_layers,
+            num_layers_gnn=args.num_gnn_layers,
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
-            CNN_mode=None,
-            attentionMode="GAT_modified",
+            attentionMode=args.attention_mode,
             concat_attention=True,
         ).to(device)
         model.reset_parameters()
