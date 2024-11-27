@@ -123,13 +123,14 @@ class CNN(torch.nn.Module):
         for i, (conv, batch_norm) in enumerate(zip(self.convs, self.batch_norms)):
             x = conv(x)
             x = batch_norm(x)
-            x = F.relu(x, inplace=True)
+            x = F.relu(x)
 
             if i % 2 == 0:
-                x = F.max_pool2d(kernel_size=2)
+                x = F.max_pool2d(x, kernel_size=2)
+        x = x.reshape((x.shape[0], -1))
         for lin in self.compressMLP:
             x = lin(x)
-            x = F.relu(x, inplace=True)
+            x = F.relu(x)
         return x
 
 
@@ -249,12 +250,12 @@ class DecentralPlannerGATNet(torch.nn.Module):
         x = self.cnn(x)
         for conv in self.gnns:
             x = conv(x, edge_index)
-            x = F.relu(x, inplace=True)
+            x = F.relu(x)
         for lin in self.actionsMLP[:-1]:
             x = lin(x)
-            x = F.relu(x, inplace=True)
+            x = F.relu(x)
             if self.use_dropout:
-                x = F.dropout(x, p=0.2, training=self.training, inplace=True)
+                x = F.dropout(x, p=0.2, training=self.training)
         x = self.actionsMLP[-1](x)
         return x
 
