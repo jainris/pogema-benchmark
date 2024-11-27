@@ -413,7 +413,7 @@ def main():
 
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
 
-    oe_graph_dataset = []
+    oe_graph_dataset = None
 
     def run_model_on_grid(grid_config, max_episodes=None):
         env = pogema_v0(grid_config=grid_config)
@@ -429,7 +429,7 @@ def main():
                     True,
                     None,
                 )
-                gdata, _ = convert_dense_graph_dataset_to_sparse_pyg_dataset(gdata)
+                gdata = MAPFGraphDataset(gdata)[0]
 
                 gdata.to(device)
 
@@ -450,7 +450,7 @@ def main():
                     True,
                     None,
                 )
-                gdata, _ = convert_dense_graph_dataset_to_sparse_pyg_dataset(gdata)
+                gdata = MAPFGraphDataset(gdata)[0]
 
                 gdata.to(device)
 
@@ -504,8 +504,8 @@ def main():
             num_samples += out.shape[0]
             n_batches += 1
 
-        if len(oe_graph_dataset) > 0:
-            oe_dl = DataLoader(oe_graph_dataset, batch_size=args.batch_size)
+        if oe_graph_dataset is not None:
+            oe_dl = DataLoader(MAPFGraphDataset(oe_graph_dataset), batch_size=args.batch_size)
 
             for data in oe_dl:
                 data = data.to(device)
@@ -651,12 +651,15 @@ def main():
                         True,
                         None,
                     )
-                    new_oe_graph_dataset, _ = (
-                        convert_dense_graph_dataset_to_sparse_pyg_dataset(
-                            new_oe_graph_dataset
+                    if oe_graph_dataset is None:
+                        oe_graph_dataset = new_oe_graph_dataset
+                    else:
+                        oe_graph_dataset = tuple(
+                            torch.concat(
+                                [oe_graph_dataset[i], new_oe_graph_dataset[i]], dim=0
+                            )
+                            for i in range(len(oe_graph_dataset))
                         )
-                    )
-                    oe_graph_dataset = oe_graph_dataset + new_oe_graph_dataset
                 print("Finished Online Expert")
                 print("----------------------")
 
