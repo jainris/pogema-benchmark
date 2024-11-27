@@ -30,7 +30,7 @@ from run_expert import (
     run_expert_algorithm,
     add_expert_dataset_args,
 )
-from imitation_dataset_pyg import convert_dense_graph_dataset_to_sparse_pyg_dataset
+from imitation_dataset_pyg import MAPFGraphDataset
 
 
 def GNNFactory(in_channels, out_channels, attentionMode, num_attention_heads):
@@ -373,26 +373,12 @@ def main():
     for key in sorted(DATASET_FILE_NAME_KEYS):
         file_name += f"_{key}_{dict_args[key]}"
     file_name = file_name[1:] + ".pkl"
-    path = pathlib.Path(f"{args.dataset_dir}", "pyg_processed_dataset", f"{file_name}")
-    if path.exists():
-        with open(path, "rb") as f:
-            graph_dataset, graph_map_id = pickle.load(f)
-    else:
-        other_path = pathlib.Path(
-            f"{args.dataset_dir}", "processed_dataset", f"{file_name}"
-        )
 
-        with open(other_path, "rb") as f:
-            dense_dataset = pickle.load(f)
-
-        print("Could not find pyg processed dataset, processing it now.")
-        graph_dataset, graph_map_id = convert_dense_graph_dataset_to_sparse_pyg_dataset(
-            dense_dataset
-        )
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
-            pickle.dump(graph_dataset, f)
+    path = pathlib.Path(
+        f"{args.dataset_dir}", "processed_dataset", f"{file_name}"
+    )
+    with open(path, "rb") as f:
+        dense_dataset = pickle.load(f)
 
     loss_function = torch.nn.CrossEntropyLoss()
 
@@ -410,15 +396,14 @@ def main():
     validation_id_max = train_id_max + int(args.num_samples * args.validation_fraction)
 
     def _divide_dataset(start, end):
-        start_idx = torch.nonzero(graph_map_id >= start)[0][0]
-        end_idx = torch.nonzero(graph_map_id < end)[-1][0] + 1
-        return graph_dataset[start_idx:end_idx]
+        mask = torch.logical_and(dense_dataset[-1] >= start, dense_dataset[-1] < end)
+        return tuple(gd[mask] for gd in dense_dataset)
 
     train_dataset = _divide_dataset(0, train_id_max)
     # validation_dataset = _divide_dataset(train_id_max, validation_id_max)
     # test_dataset = _divide_dataset(validation_id_max, torch.inf)
 
-    # num_batches = (graph_dataset[0].shape[0] + args.batch_size - 1) // args.batch_size
+    train_dataset = MAPFGraphDataset(train_dataset)
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
 
     best_validation_success_rate = 0.0

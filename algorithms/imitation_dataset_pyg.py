@@ -30,12 +30,25 @@ def convert_dense_graph_dataset_to_sparse_pyg_dataset(dense_dataset):
     return new_graph_dataset, graph_map_id
 
 
-# class MAPFGraphDataset(Dataset):
-#     def __init__(self, graph_dataset) -> None:
-#         self.graph_dataset = graph_dataset
+class MAPFGraphDataset(Dataset):
+    def __init__(self, dense_dataset) -> None:
+        (
+            self.dataset_node_features,
+            self.dataset_Adj,
+            self.dataset_target_actions,
+            self.dataset_terminated,
+            self.graph_map_id,
+        ) = dense_dataset
 
-#     def __len__(self) -> int:
-#         return len(self.graph_dataset)
+    def __len__(self) -> int:
+        return self.dataset_node_features.shape[0]
 
-#     def __getitem__(self, index) -> Any:
-#         return self.graph_dataset[index]
+    def __getitem__(self, index):
+        edge_index, edge_weight = dense_to_sparse(self.dataset_Adj[index])
+        return Data(
+            x=self.dataset_node_features[index],
+            edge_index=edge_index,
+            edge_weight=edge_weight,
+            y=self.dataset_target_actions[index],
+            terminated=self.dataset_terminated[index],
+        )
