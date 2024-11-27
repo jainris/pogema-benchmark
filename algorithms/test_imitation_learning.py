@@ -186,14 +186,13 @@ def main():
 
         if success:
             num_completed += 1
+        success_rate = num_completed / (i + 1)
+        wandb.log({"success_rate": success_rate})
+
         print(
             f"Testing Graph {i + 1}/{len(grid_configs)}, "
-            f"Current Success Rate: {num_completed / (i + 1)}"
+            f"Current Success Rate: {success_rate}"
         )
-    success_rate = num_completed / len(grid_configs)
-    results = {"success_rate": success_rate}
-
-    wandb.log(results)
 
 
 if __name__ == "__main__":
