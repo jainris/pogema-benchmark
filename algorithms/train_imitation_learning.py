@@ -31,6 +31,43 @@ from run_expert import (
 )
 
 
+def add_training_args(parser):
+    parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
+
+    parser.add_argument("--comm_radius", type=int, default=7)
+
+    parser.add_argument("--validation_fraction", type=float, default=0.15)
+    parser.add_argument("--test_fraction", type=float, default=0.15)
+    parser.add_argument("--num_training_oe", type=int, default=500)
+    parser.add_argument("--batch_size", type=int, default=64)
+
+    parser.add_argument("--embedding_size", type=int, default=128)
+    parser.add_argument("--num_gnn_layers", type=int, default=3)
+    parser.add_argument("--num_attention_heads", type=int, default=1)
+
+    parser.add_argument("--lr_start", type=float, default=1e-3)
+    parser.add_argument("--lr_end", type=float, default=1e-6)
+    parser.add_argument("--num_epochs", type=int, default=300)
+
+    parser.add_argument("--validation_every_epochs", type=int, default=4)
+    parser.add_argument(
+        "--run_online_expert", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--save_intmd_checkpoints", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
+
+    parser.add_argument("--run_name", type=str, default=None)
+    parser.add_argument("--device", type=int, default=None)
+    parser.add_argument("--initial_val_size", type=int, default=128)
+    parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
+    parser.add_argument("--num_run_oe", type=int, default=500)
+    parser.add_argument("--run_oe_after", type=int, default=0)
+
+    return parser
+
+
 class DecentralPlannerGATNet(torch.nn.Module):
     def __init__(
         self,
@@ -384,41 +421,57 @@ class DecentralPlannerGATNet(torch.nn.Module):
         return action_predict
 
 
+def run_model_on_grid(
+    model, comm_radius, obs_radius, grid_config, device, max_episodes=None
+):
+    env = pogema_v0(grid_config=grid_config)
+    observations, infos = env.reset()
+
+    if max_episodes is None:
+        while True:
+            gdata = generate_graph_dataset(
+                [[[observations], [0], [0]]],
+                comm_radius,
+                obs_radius,
+                None,
+                True,
+                None,
+            )
+
+            model.addGSO(gdata[1].to(device), device)
+            actions = model(gdata[0].to(device), device)
+            actions = torch.argmax(actions, dim=-1).detach().cpu()
+
+            observations, rewards, terminated, truncated, infos = env.step(actions)
+
+            if all(terminated) or all(truncated):
+                break
+    else:
+        for _ in range(max_episodes):
+            gdata = generate_graph_dataset(
+                [[[observations], [0], [0]]],
+                comm_radius,
+                obs_radius,
+                None,
+                True,
+                None,
+            )
+
+            model.addGSO(gdata[1].to(device), device)
+            actions = model(gdata[0].to(device), device)
+            actions = torch.argmax(actions, dim=-1).detach().cpu()
+
+            observations, rewards, terminated, truncated, infos = env.step(actions)
+
+            if all(terminated) or all(truncated):
+                break
+    return all(terminated), env, observations
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
     parser = add_expert_dataset_args(parser)
-    parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
-
-    parser.add_argument("--comm_radius", type=int, default=7)
-
-    parser.add_argument("--validation_fraction", type=float, default=0.15)
-    parser.add_argument("--test_fraction", type=float, default=0.15)
-    parser.add_argument("--num_training_oe", type=int, default=500)
-    parser.add_argument("--batch_size", type=int, default=64)
-
-    parser.add_argument("--embedding_size", type=int, default=128)
-    parser.add_argument("--num_gnn_layers", type=int, default=3)
-    parser.add_argument("--num_attention_heads", type=int, default=1)
-
-    parser.add_argument("--lr_start", type=float, default=1e-3)
-    parser.add_argument("--lr_end", type=float, default=1e-6)
-    parser.add_argument("--num_epochs", type=int, default=300)
-
-    parser.add_argument("--validation_every_epochs", type=int, default=4)
-    parser.add_argument(
-        "--run_online_expert", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument(
-        "--save_intmd_checkpoints", action=argparse.BooleanOptionalAction, default=True
-    )
-    parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
-
-    parser.add_argument("--run_name", type=str, default=None)
-    parser.add_argument("--device", type=int, default=None)
-    parser.add_argument("--initial_val_size", type=int, default=128)
-    parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
-    parser.add_argument("--num_run_oe", type=int, default=500)
-    parser.add_argument("--run_oe_after", type=int, default=0)
+    parser = add_training_args(parser)
 
     args = parser.parse_args()
     print(args)
@@ -541,50 +594,6 @@ def main():
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
 
     oe_graph_dataset = None
-
-    def run_model_on_grid(grid_config, max_episodes=None):
-        env = pogema_v0(grid_config=grid_config)
-        observations, infos = env.reset()
-
-        if max_episodes is None:
-            while True:
-                gdata = generate_graph_dataset(
-                    [[[observations], [0], [0]]],
-                    args.comm_radius,
-                    args.obs_radius,
-                    None,
-                    True,
-                    None,
-                )
-
-                model.addGSO(gdata[1].to(device), device)
-                actions = model(gdata[0].to(device), device)
-                actions = torch.argmax(actions, dim=-1).detach().cpu()
-
-                observations, rewards, terminated, truncated, infos = env.step(actions)
-
-                if all(terminated) or all(truncated):
-                    break
-        else:
-            for _ in range(max_episodes):
-                gdata = generate_graph_dataset(
-                    [[[observations], [0], [0]]],
-                    args.comm_radius,
-                    args.obs_radius,
-                    None,
-                    True,
-                    None,
-                )
-
-                model.addGSO(gdata[1].to(device), device)
-                actions = model(gdata[0].to(device), device)
-                actions = torch.argmax(actions, dim=-1).detach().cpu()
-
-                observations, rewards, terminated, truncated, infos = env.step(actions)
-
-                if all(terminated) or all(truncated):
-                    break
-        return all(terminated), env, observations
 
     def multiprocess_run_expert(
         queue, expert, env, observations, save_termination_state
@@ -717,7 +726,13 @@ def main():
             print("Starting Validation")
 
             for graph_id in range(train_id_max, cur_validation_id_max):
-                success, env, observations = run_model_on_grid(grid_configs[graph_id])
+                success, env, observations = run_model_on_grid(
+                    model,
+                    args.comm_radius,
+                    args.obs_radius,
+                    grid_configs[graph_id],
+                    device,
+                )
 
                 if success:
                     num_completed += 1
@@ -769,7 +784,12 @@ def main():
                         on_target=args.on_target,
                     )
                     success, env, observations = run_model_on_grid(
-                        grid_config, args.max_episode_steps
+                        model,
+                        args.comm_radius,
+                        args.obs_radius,
+                        grid_configs[graph_id],
+                        device,
+                        args.max_episode_steps,
                     )
 
                     if not success:
