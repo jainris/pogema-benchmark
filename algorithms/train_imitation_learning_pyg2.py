@@ -31,11 +31,18 @@ from run_expert import (
     add_expert_dataset_args,
 )
 from imitation_dataset_pyg import MAPFGraphDataset
+from gnn_magat_pyg import MAGATAdditiveConv
 
 
 def GNNFactory(in_channels, out_channels, attentionMode, num_attention_heads):
     if attentionMode == "GAT_origin":
         return GATConv(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            heads=num_attention_heads,
+        )
+    elif attentionMode == "MAGAT_additive":
+        return MAGATAdditiveConv(
             in_channels=in_channels,
             out_channels=out_channels,
             heads=num_attention_heads,
