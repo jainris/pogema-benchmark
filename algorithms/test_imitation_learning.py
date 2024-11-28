@@ -56,6 +56,7 @@ def main():
     parser.add_argument("--test_dataset_seed", type=int, default=42)
     parser.add_argument("--test_dataset_dir", type=str, default="dataset")
 
+    parser.add_argument("--test_comm_radius", type=int, default=7)
     parser.add_argument("--model_epoch_num", type=int, default=None)
 
     parser.add_argument("--test_name", type=str, default="in_distribution")
