@@ -38,7 +38,7 @@ def add_expert_dataset_args(parser):
     parser.add_argument("--collision_system", type=str, default="soft")
     parser.add_argument("--on_target", type=str, default="nothing")
 
-    parser.add_argument("--num_samples", type=int, default=1000)
+    parser.add_argument("--num_samples", type=int, default=2000)
     parser.add_argument("--dataset_seed", type=int, default=42)
     parser.add_argument("--dataset_dir", type=str, default="dataset")
 
@@ -127,7 +127,6 @@ def main():
         success = run_expert_algorithm(
             expert,
             grid_config=grid_config,
-            save_termination_state=args.save_termination_state,
         )
 
         if success:

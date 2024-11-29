@@ -133,13 +133,14 @@ def main():
 
         if all(all_terminated[-1]):
             num_success += 1
+            if args.save_termination_state:
+                dataset.append((all_observations, all_actions, all_terminated))
+            else:
+                dataset.append((all_observations, all_actions))
 
         print(f"-- Success Rate: {num_success / (i + 1)}")
 
-        if args.save_termination_state:
-            dataset.append((all_observations, all_actions, all_terminated))
-        else:
-            dataset.append((all_observations, all_actions))
+    print(f"{len(dataset)}/{len(grid_configs)} samples were successfully added to the dataset")
 
     file_name = ""
     dict_args = vars(args)
