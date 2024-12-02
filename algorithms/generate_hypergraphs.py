@@ -52,7 +52,6 @@ from scipy.spatial.distance import squareform, pdist
 
 
 def update_groups(agent_pos, groups, hypergraph_greedy_distance):
-    # Work around due to lack of pointers in Python
     if len(groups.keys()) > 0:
         max_groups = max(groups.keys()) + 1
     else:
@@ -64,16 +63,27 @@ def update_groups(agent_pos, groups, hypergraph_greedy_distance):
     graph = np.nonzero(dists <= hypergraph_greedy_distance)
 
     src, dst = graph
+
+    # Work around due to lack of pointers in Python
     group_ids = dict()
+    group_parent = dict()
+
+    def _unravel_ptr(ptr):
+        while group_parent[ptr] != -1:
+            ptr = group_parent[ptr]
+        return ptr
 
     def _set_pointer(val):
-        return [[val]]
+        group_parent[val] = -1
+        return val
 
     def _update_pointer(ptr_1, ptr_2):
-        ptr_1[0] = ptr_2[0]
+        ptr_1 = _unravel_ptr(ptr_1)
+        ptr_2 = _unravel_ptr(ptr_2)
+        group_parent[ptr_1] = ptr_2
 
     def _access_value_at_pointer(ptr):
-        return ptr[0][0]
+        return _unravel_ptr(ptr)
 
     for s, d in zip(src, dst):
         if (s in group_ids) and (d in group_ids):
@@ -180,7 +190,7 @@ def main():
 
     all_hypergraphs = []
     for sample_num, (grid_config, data) in enumerate(zip(grid_configs, dataset)):
-        print(f"Generating Graph Dataset for map {sample_num + 1}/{args.num_samples}")
+        print(f"Generating Hypergraph for map {sample_num + 1}/{args.num_samples}")
         move_results = np.array(grid_config.MOVES)
 
         env = pogema_v0(grid_config)
@@ -193,7 +203,7 @@ def main():
             obstacles = env.grid.get_obstacles()
 
             groups = dict()
-            groups = update_groups(agent_pos, groups)
+            groups = update_groups(agent_pos, groups, args.hypergraph_greedy_distance)
 
             for _ in range(args.hypergraph_num_steps):
                 _, agent_pos = greedy_step(
