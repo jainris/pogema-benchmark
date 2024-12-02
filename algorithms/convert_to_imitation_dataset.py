@@ -123,6 +123,8 @@ def main():
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "rb") as f:
         dataset = pickle.load(f)
+    if isinstance(dataset, tuple):
+        dataset, seed_mask = dataset
 
     graph_dataset = generate_graph_dataset(
         dataset,

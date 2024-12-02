@@ -120,6 +120,7 @@ def main():
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
 
     dataset = []
+    seed_mask = []
     num_success = 0
     for i, grid_config in enumerate(grid_configs):
         print(f"Running expert on map {i + 1}/{args.num_samples}", end=" ")
@@ -132,11 +133,14 @@ def main():
         )
 
         if all(all_terminated[-1]):
+            seed_mask.append(True)
             num_success += 1
             if args.save_termination_state:
                 dataset.append((all_observations, all_actions, all_terminated))
             else:
                 dataset.append((all_observations, all_actions))
+        else:
+            seed_mask.append(False)
 
         print(f"-- Success Rate: {num_success / (i + 1)}")
 
@@ -152,7 +156,7 @@ def main():
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
-        pickle.dump(dataset, f)
+        pickle.dump((dataset, seed_mask), f)
 
 
 if __name__ == "__main__":
