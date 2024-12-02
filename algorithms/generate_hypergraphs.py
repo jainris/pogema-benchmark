@@ -121,6 +121,9 @@ def main():
 
     parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
     parser.add_argument("--hypergraph_num_steps", type=int, default=3)
+    parser.add_argument(
+        "--take_all_seeds", action=argparse.BooleanOptionalAction, default=False
+    )
 
     args = parser.parse_args()
     print(args)
@@ -138,7 +141,7 @@ def main():
         dataset = pickle.load(f)
     if isinstance(dataset, tuple):
         dataset, seed_mask = dataset
-    else:
+    elif not args.take_all_seeds:
         raise ValueError("Dataset is expected to have a seed_mask.")
 
     num_agents = int(args.robot_density * args.map_h * args.map_w)
@@ -152,7 +155,8 @@ def main():
         rng = np.random.default_rng(args.dataset_seed)
         seeds = rng.integers(10**10, size=args.num_samples)
 
-        seeds = seeds[seed_mask]
+        if not args.take_all_seeds:
+            seeds = seeds[seed_mask]
 
         grid_configs = []
 
@@ -175,7 +179,8 @@ def main():
         raise ValueError(f"Unsupported map type: {args.map_type}.")
 
     all_hypergraphs = []
-    for grid_config, data in zip(grid_configs, dataset):
+    for sample_num, (grid_config, data) in enumerate(zip(grid_configs, dataset)):
+        print(f"Generating Graph Dataset for map {sample_num + 1}/{args.num_samples}")
         move_results = np.array(grid_config.MOVES)
 
         env = pogema_v0(grid_config)
