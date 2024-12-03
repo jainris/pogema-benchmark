@@ -80,7 +80,8 @@ def update_groups(agent_pos, groups, hypergraph_greedy_distance):
     def _update_pointer(ptr_1, ptr_2):
         ptr_1 = _unravel_ptr(ptr_1)
         ptr_2 = _unravel_ptr(ptr_2)
-        group_parent[ptr_1] = ptr_2
+        if ptr_1 != ptr_2:
+            group_parent[ptr_1] = ptr_2
 
     def _access_value_at_pointer(ptr):
         return _unravel_ptr(ptr)
