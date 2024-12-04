@@ -52,3 +52,41 @@ class MAPFGraphDataset(Dataset):
             y=self.dataset_target_actions[index],
             terminated=self.dataset_terminated[index],
         )
+
+
+class MAPFHypergraphDataset(Dataset):
+    def __init__(
+        self, dense_dataset, hyperedge_indices, store_graph_indices=False
+    ) -> None:
+        (
+            self.dataset_node_features,
+            self.dataset_Adj,
+            self.dataset_target_actions,
+            self.dataset_terminated,
+            self.graph_map_id,
+        ) = dense_dataset
+        self.hyperedge_indices = hyperedge_indices
+        self.store_graph_indices = store_graph_indices
+
+    def __len__(self) -> int:
+        return self.dataset_node_features.shape[0]
+
+    def __getitem__(self, index):
+        if self.store_graph_indices:
+            graph_edge_index, graph_edge_weight = dense_to_sparse(
+                self.dataset_Adj[index]
+            )
+            return Data(
+                x=self.dataset_node_features[index],
+                edge_index=torch.LongTensor(self.hyperedge_indices[index]),
+                graph_edge_index=graph_edge_index,
+                graph_edge_weight=graph_edge_weight,
+                y=self.dataset_target_actions[index],
+                terminated=self.dataset_terminated[index],
+            )
+        return Data(
+            x=self.dataset_node_features[index],
+            edge_index=torch.LongTensor(self.hyperedge_indices[index]),
+            y=self.dataset_target_actions[index],
+            terminated=self.dataset_terminated[index],
+        )

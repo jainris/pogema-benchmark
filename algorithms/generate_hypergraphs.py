@@ -126,6 +126,29 @@ def get_unique_groups(groups):
     return unique_groups
 
 
+def generate_hypergraph_indices(
+    env, hypergraph_greedy_distance, hypergraph_num_steps, move_results
+):
+    target_pos = np.array(env.grid.get_targets_xy())
+    agent_pos = np.array(env.grid.get_agents_xy())
+    obstacles = env.grid.get_obstacles()
+
+    groups = dict()
+    groups = update_groups(agent_pos, groups, hypergraph_greedy_distance)
+
+    for _ in range(hypergraph_num_steps):
+        _, agent_pos = greedy_step(target_pos, agent_pos, obstacles, move_results)
+        groups = update_groups(agent_pos, groups, hypergraph_greedy_distance)
+    unique_groups = get_unique_groups(groups)
+
+    hypergraph_index = [[], []]
+    for i, nodes in enumerate(unique_groups):
+        for node in nodes:
+            hypergraph_index[0].append(node)
+            hypergraph_index[1].append(i)
+    return hypergraph_index
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate Hypergraphs")
     parser = add_expert_dataset_args(parser)
@@ -199,27 +222,12 @@ def main():
         _, all_actions, _ = data
 
         for actions in all_actions:
-            target_pos = np.array(env.grid.get_targets_xy())
-            agent_pos = np.array(env.grid.get_agents_xy())
-            obstacles = env.grid.get_obstacles()
-
-            groups = dict()
-            groups = update_groups(agent_pos, groups, args.hypergraph_greedy_distance)
-
-            for _ in range(args.hypergraph_num_steps):
-                _, agent_pos = greedy_step(
-                    target_pos, agent_pos, obstacles, move_results
-                )
-                groups = update_groups(
-                    agent_pos, groups, args.hypergraph_greedy_distance
-                )
-            unique_groups = get_unique_groups(groups)
-
-            hypergraph_index = [[], []]
-            for i, nodes in enumerate(unique_groups):
-                for node in nodes:
-                    hypergraph_index[0].append(node)
-                    hypergraph_index[1].append(i)
+            hypergraph_index = generate_hypergraph_indices(
+                env,
+                args.hypergraph_greedy_distance,
+                args.hypergraph_num_steps,
+                move_results,
+            )
 
             all_hypergraphs.append(hypergraph_index)
             env.step(actions)

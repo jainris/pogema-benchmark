@@ -20,8 +20,9 @@ DATASET_FILE_NAME_KEYS = [
     "dataset_seed",
     "save_termination_state",
     "collision_system",
-    "on_target"
+    "on_target",
 ]
+
 
 def add_expert_dataset_args(parser):
     parser.add_argument("--expert_algorithm", type=str, default="LaCAM")
@@ -48,7 +49,12 @@ def add_expert_dataset_args(parser):
 
 
 def run_expert_algorithm(
-    expert, env=None, observations=None, grid_config=None, save_termination_state=True
+    expert,
+    env=None,
+    observations=None,
+    grid_config=None,
+    save_termination_state=True,
+    additional_data_func=None,
 ):
     if env is None:
         env = pogema_v0(grid_config=grid_config)
@@ -57,12 +63,20 @@ def run_expert_algorithm(
     all_actions = []
     all_observations = []
     all_terminated = []
+    additional_data = []
 
     while True:
         actions = expert.act(observations)
 
         all_observations.append(observations)
         all_actions.append(actions)
+
+        if additional_data_func is not None:
+            additional_data.append(
+                additional_data_func(
+                    env=env, observations=observations, actions=actions
+                )
+            )
 
         observations, rewards, terminated, truncated, infos = env.step(actions)
 
@@ -72,6 +86,8 @@ def run_expert_algorithm(
         if all(terminated) or all(truncated):
             break
 
+    if additional_data_func is not None:
+        return all_actions, all_observations, all_terminated, additional_data
     return all_actions, all_observations, all_terminated
 
 
@@ -144,7 +160,9 @@ def main():
 
         print(f"-- Success Rate: {num_success / (i + 1)}")
 
-    print(f"{len(dataset)}/{len(grid_configs)} samples were successfully added to the dataset")
+    print(
+        f"{len(dataset)}/{len(grid_configs)} samples were successfully added to the dataset"
+    )
 
     file_name = ""
     dict_args = vars(args)

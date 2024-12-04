@@ -8,6 +8,7 @@ import sys
 import wandb
 
 from multiprocessing import Process, Queue
+from itertools import compress
 
 from pogema import pogema_v0, GridConfig
 
@@ -22,45 +23,61 @@ import torch.optim as optim
 from graphs.weights_initializer import weights_init
 
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GATConv
+from torch_geometric.nn import GATConv, HypergraphConv
 
 from convert_to_imitation_dataset import generate_graph_dataset
+from generate_hypergraphs import generate_hypergraph_indices
 from run_expert import (
     DATASET_FILE_NAME_KEYS,
     run_expert_algorithm,
     add_expert_dataset_args,
 )
-from imitation_dataset_pyg import MAPFGraphDataset
+from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2, MAGATMultiplicativeConv
 
 
-def GNNFactory(in_channels, out_channels, attentionMode, num_attention_heads):
-    if attentionMode == "GAT_origin":
-        return GATConv(
+def GNNFactory(
+    in_channels, out_channels, num_attention_heads, model_type="MAGAT", **model_kwargs
+):
+    if model_type == "MAGAT":
+        attentionMode = model_kwargs["attentionMode"]
+        if attentionMode == "GAT_origin":
+            return GATConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+            )
+        elif attentionMode == "MAGAT_additive":
+            return MAGATAdditiveConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+            )
+        elif attentionMode == "MAGAT_additive2":
+            return MAGATAdditiveConv2(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+            )
+        elif attentionMode == "MAGAT_multiplicative":
+            return MAGATMultiplicativeConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+            )
+        else:
+            raise ValueError(
+                f"Currently, we don't support attention mode: {attentionMode}"
+            )
+    elif model_type == "HGNN":
+        return HypergraphConv(
             in_channels=in_channels,
             out_channels=out_channels,
-            heads=num_attention_heads,
-        )
-    elif attentionMode == "MAGAT_additive":
-        return MAGATAdditiveConv(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            heads=num_attention_heads,
-        )
-    elif attentionMode == "MAGAT_additive2":
-        return MAGATAdditiveConv2(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            heads=num_attention_heads,
-        )
-    elif attentionMode == "MAGAT_multiplicative":
-        return MAGATMultiplicativeConv(
-            in_channels=in_channels,
-            out_channels=out_channels,
+            use_attention=model_kwargs["use_attention"],
             heads=num_attention_heads,
         )
     else:
-        raise ValueError(f"Currently, we don't support attention mode: {attentionMode}")
+        raise ValueError(f"Currently, we don't support model: {model_type}")
 
 
 class CNN(torch.nn.Module):
@@ -161,7 +178,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         numInputFeatures,
         num_attention_heads,
         use_dropout,
-        attentionMode,
+        gnn_kwargs,
         concat_attention,
         num_classes=5,
         cnn_output_size=None,
@@ -216,7 +233,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
                 in_channels=self.numFeatures2Share,
                 out_channels=embedding_sizes_gnn[0],
                 num_attention_heads=num_attention_heads,
-                attentionMode=attentionMode,
+                **gnn_kwargs,
             )
         )
 
@@ -226,7 +243,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
                     in_channels=num_attention_heads * embedding_sizes_gnn[i],
                     out_channels=embedding_sizes_gnn[i + 1],
                     num_attention_heads=num_attention_heads,
-                    attentionMode=attentionMode,
+                    **gnn_kwargs,
                 )
             )
 
@@ -316,6 +333,9 @@ def main():
     parser.add_argument("--run_oe_after", type=int, default=0)
     parser.add_argument("--attention_mode", type=str, default="GAT_modified")
 
+    parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
+    parser.add_argument("--hypergraph_num_steps", type=int, default=3)
+
     args = parser.parse_args()
     print(args)
 
@@ -365,17 +385,43 @@ def main():
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
 
+    hypergraph_model = False
     if args.imitation_learning_model == "MAGAT":
+        gnn_kwargs = {"attentionMode": args.attention_mode}
         model = DecentralPlannerGATNet(
             FOV=args.obs_radius,
             numInputFeatures=args.embedding_size,
             num_layers_gnn=args.num_gnn_layers,
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
-            attentionMode=args.attention_mode,
+            gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)
         model.reset_parameters()
+    elif args.imitation_learning_model == "HGCN":
+        hypergraph_model = True
+        gnn_kwargs = {"use_attention": False}
+        model = DecentralPlannerGATNet(
+            FOV=args.obs_radius,
+            numInputFeatures=args.embedding_size,
+            num_layers_gnn=args.num_gnn_layers,
+            num_attention_heads=args.num_attention_heads,
+            use_dropout=True,
+            gnn_kwargs=gnn_kwargs,
+            concat_attention=True,
+        ).to(device)
+    elif args.imitation_learning_model == "HGAT":
+        hypergraph_model = True
+        gnn_kwargs = {"use_attention": True}
+        model = DecentralPlannerGATNet(
+            FOV=args.obs_radius,
+            numInputFeatures=args.embedding_size,
+            num_layers_gnn=args.num_gnn_layers,
+            num_attention_heads=args.num_attention_heads,
+            use_dropout=True,
+            gnn_kwargs=gnn_kwargs,
+            concat_attention=True,
+        ).to(device)
     else:
         raise ValueError(
             f"Unsupported imitation learning model {args.imitation_learning_model}."
@@ -386,7 +432,8 @@ def main():
         optimizer, T_max=args.num_epochs, eta_min=args.lr_end
     )
 
-    graph_dataset = None
+    dense_dataset = None
+    hyper_edge_indices = None
 
     file_name = ""
     dict_args = vars(args)
@@ -394,11 +441,13 @@ def main():
         file_name += f"_{key}_{dict_args[key]}"
     file_name = file_name[1:] + ".pkl"
 
-    path = pathlib.Path(
-        f"{args.dataset_dir}", "processed_dataset", f"{file_name}"
-    )
+    path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
     with open(path, "rb") as f:
         dense_dataset = pickle.load(f)
+    if hypergraph_model:
+        path = pathlib.Path(f"{args.dataset_dir}", "hypergraphs", f"{file_name}")
+        with open(path, "rb") as f:
+            hyper_edge_indices = pickle.load(f)
 
     loss_function = torch.nn.CrossEntropyLoss()
 
@@ -417,13 +466,20 @@ def main():
 
     def _divide_dataset(start, end):
         mask = torch.logical_and(dense_dataset[-1] >= start, dense_dataset[-1] < end)
-        return tuple(gd[mask] for gd in dense_dataset)
+        if hyper_edge_indices is not None:
+            hindices = list(compress(hyper_edge_indices, mask))
+        else:
+            hindices = None
+        return tuple(gd[mask] for gd in dense_dataset), hindices
 
-    train_dataset = _divide_dataset(0, train_id_max)
+    train_dataset, train_hindices = _divide_dataset(0, train_id_max)
     # validation_dataset = _divide_dataset(train_id_max, validation_id_max)
     # test_dataset = _divide_dataset(validation_id_max, torch.inf)
 
-    train_dataset = MAPFGraphDataset(train_dataset)
+    if hypergraph_model:
+        train_dataset = MAPFHypergraphDataset(train_dataset, train_hindices)
+    else:
+        train_dataset = MAPFGraphDataset(train_dataset)
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
 
     best_validation_success_rate = 0.0
@@ -433,65 +489,75 @@ def main():
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
 
     oe_graph_dataset = None
+    oe_hypergraph_indices = []
 
     def run_model_on_grid(grid_config, max_episodes=None):
         env = pogema_v0(grid_config=grid_config)
         observations, infos = env.reset()
+        move_results = np.array(grid_config.MOVES)
 
-        if max_episodes is None:
-            while True:
-                gdata = generate_graph_dataset(
-                    [[[observations], [0], [0]]],
-                    args.comm_radius,
-                    args.obs_radius,
-                    None,
-                    True,
-                    None,
+        while True:
+            gdata = generate_graph_dataset(
+                [[[observations], [0], [0]]],
+                args.comm_radius,
+                args.obs_radius,
+                None,
+                True,
+                None,
+            )
+            if hypergraph_model:
+                hindex = generate_hypergraph_indices(
+                    env,
+                    args.hypergraph_greedy_distance,
+                    args.hypergraph_num_steps,
+                    move_results,
                 )
+                gdata = MAPFHypergraphDataset(gdata, [hindex])
+            else:
                 gdata = MAPFGraphDataset(gdata)[0]
 
-                gdata.to(device)
+            gdata.to(device)
 
-                actions = model(gdata.x, gdata.edge_index)
-                actions = torch.argmax(actions, dim=-1).detach().cpu()
+            actions = model(gdata.x, gdata.edge_index)
+            actions = torch.argmax(actions, dim=-1).detach().cpu()
 
-                observations, rewards, terminated, truncated, infos = env.step(actions)
+            observations, rewards, terminated, truncated, infos = env.step(actions)
 
-                if all(terminated) or all(truncated):
-                    break
-        else:
-            for _ in range(max_episodes):
-                gdata = generate_graph_dataset(
-                    [[[observations], [0], [0]]],
-                    args.comm_radius,
-                    args.obs_radius,
-                    None,
-                    True,
-                    None,
-                )
-                gdata = MAPFGraphDataset(gdata)[0]
+            if all(terminated) or all(truncated):
+                break
 
-                gdata.to(device)
-
-                actions = model(gdata.x, gdata.edge_index)
-                actions = torch.argmax(actions, dim=-1).detach().cpu()
-
-                observations, rewards, terminated, truncated, infos = env.step(actions)
-
-                if all(terminated) or all(truncated):
+            if max_episodes is not None:
+                max_episodes -= 1
+                if max_episodes <= 0:
                     break
         return all(terminated), env, observations
 
     def multiprocess_run_expert(
-        queue, expert, env, observations, save_termination_state
+        queue,
+        expert,
+        env,
+        observations,
+        save_termination_state,
+        additional_data_func=None,
     ):
-        all_actions, all_observations, all_terminated = run_expert_algorithm(
+        expert_results = run_expert_algorithm(
             expert,
             env=env,
             observations=observations,
             save_termination_state=save_termination_state,
+            additional_data_func=additional_data_func,
         )
-        queue.put((all_actions, all_observations, all_terminated))
+        queue.put(expert_results)
+
+    move_results = np.array(grid_config.MOVES)
+
+    def get_hypergraph_indices(env, **kwargs):
+        return generate_hypergraph_indices(
+            env,
+            hypergraph_greedy_distance=args.hypergraph_greedy_distance,
+            hypergraph_num_steps=args.hypergraph_num_steps,
+            move_results=move_results,
+        )
 
     queue = Queue()
 
@@ -524,7 +590,15 @@ def main():
             n_batches += 1
 
         if oe_graph_dataset is not None:
-            oe_dl = DataLoader(MAPFGraphDataset(oe_graph_dataset), batch_size=args.batch_size)
+            if hypergraph_model:
+                oe_dl = DataLoader(
+                    MAPFHypergraphDataset(oe_graph_dataset, oe_hypergraph_indices),
+                    batch_size=args.batch_size,
+                )
+            else:
+                oe_dl = DataLoader(
+                    MAPFGraphDataset(oe_graph_dataset), batch_size=args.batch_size
+                )
 
             for data in oe_dl:
                 data = data.to(device)
@@ -603,6 +677,7 @@ def main():
                 oe_ids = rng.integers(train_id_max, size=args.num_run_oe)
 
                 oe_dataset = []
+                oe_hindices = []
 
                 for graph_id in oe_ids:
                     grid_config = GridConfig(
@@ -625,6 +700,10 @@ def main():
                     if not success:
                         expert = expert_algorithm(inference_config)
 
+                        additional_data_func = (
+                            get_hypergraph_indices if hypergraph_model else None
+                        )
+
                         p = Process(
                             target=multiprocess_run_expert,
                             args=(
@@ -633,16 +712,16 @@ def main():
                                 env,
                                 observations,
                                 args.save_termination_state,
+                                additional_data_func,
                             ),
                         )
                         p.start()
 
                         all_actions, all_observations, all_terminated = None, None, None
+                        hindices = []
                         while True:
                             try:
-                                all_actions, all_observations, all_terminated = (
-                                    queue.get(timeout=3)
-                                )
+                                expert_results = queue.get(timeout=3)
                                 p.join()
                                 break
                             except:
@@ -650,18 +729,42 @@ def main():
                                 if p.exitcode is not None:
                                     break
 
+                        if hypergraph_model:
+                            (
+                                all_actions,
+                                all_observations,
+                                all_terminated,
+                                hindices,
+                            ) = expert_results
+                        else:
+                            all_actions, all_observations, all_terminated = (
+                                expert_results
+                            )
                         if all_actions is not None:
                             if all(all_terminated[-1]):
                                 oe_dataset.append(
                                     (all_observations, all_actions, all_terminated)
                                 )
+                                oe_hindices.extend(hindices)
                 while queue.qsize() > 0:
                     # Popping remaining elements, although no elements should remain
-                    all_actions, all_observations, all_terminated = queue.get()
+                    expert_results = queue.get()
+                    hindices = []
+                    if hypergraph_model:
+                        (
+                            all_actions,
+                            all_observations,
+                            all_terminated,
+                            hindices,
+                        ) = expert_results
+                    else:
+                        all_actions, all_observations, all_terminated = expert_results
                     oe_dataset.append((all_observations, all_actions, all_terminated))
+                    oe_hindices.extend(hindices)
 
                 if len(oe_dataset) > 0:
                     print(f"Adding {len(oe_dataset)} OE grids to the dataset")
+                    oe_hypergraph_indices.extend(oe_hindices)
                     new_oe_graph_dataset = generate_graph_dataset(
                         oe_dataset,
                         args.comm_radius,
