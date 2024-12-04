@@ -178,6 +178,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         numInputFeatures,
         num_attention_heads,
         use_dropout,
+        gnn_type,
         gnn_kwargs,
         concat_attention,
         num_classes=5,
@@ -232,6 +233,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
             GNNFactory(
                 in_channels=self.numFeatures2Share,
                 out_channels=embedding_sizes_gnn[0],
+                model_type=gnn_type,
                 num_attention_heads=num_attention_heads,
                 **gnn_kwargs,
             )
@@ -242,6 +244,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
                 GNNFactory(
                     in_channels=num_attention_heads * embedding_sizes_gnn[i],
                     out_channels=embedding_sizes_gnn[i + 1],
+                    model_type=gnn_type,
                     num_attention_heads=num_attention_heads,
                     **gnn_kwargs,
                 )
@@ -394,6 +397,7 @@ def main():
             num_layers_gnn=args.num_gnn_layers,
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
+            gnn_type="MAGAT",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)
@@ -407,6 +411,7 @@ def main():
             num_layers_gnn=args.num_gnn_layers,
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
+            gnn_type="HGNN",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)
@@ -419,6 +424,7 @@ def main():
             num_layers_gnn=args.num_gnn_layers,
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
+            gnn_type="HGNN",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)
