@@ -41,6 +41,9 @@ def main():
     parser.add_argument(
         "--test_in_distribution", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--get_validation_results", action=argparse.BooleanOptionalAction, default=False
+    )
 
     parser.add_argument("--test_map_type", type=str, default="RandomGrid")
     parser.add_argument("--test_map_h", type=int, default=20)
@@ -93,7 +96,10 @@ def main():
 
             rng = np.random.default_rng(args.dataset_seed)
             seeds = rng.integers(10**10, size=args.num_samples)
-            seeds = seeds[validation_id_max:]
+            if args.get_validation_results:
+                seeds = seeds[train_id_max:validation_id_max]
+            else:
+                seeds = seeds[validation_id_max:]
 
             grid_configs = []
             for seed in seeds:
