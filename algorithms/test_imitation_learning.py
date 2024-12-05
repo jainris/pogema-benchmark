@@ -185,6 +185,8 @@ def main():
 
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
 
+    model = model.eval()
+
     num_completed = 0
     for i, grid_config in enumerate(grid_configs):
         success, env, observations = run_model_on_grid(
