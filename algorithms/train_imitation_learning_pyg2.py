@@ -374,10 +374,8 @@ def main():
         rng = np.random.default_rng(args.dataset_seed)
         seeds = rng.integers(10**10, size=args.num_samples)
 
-        grid_configs = []
-
-        for seed in seeds:
-            grid_config = GridConfig(
+        def _grid_config_generator(seed):
+            return GridConfig(
                 num_agents=num_agents,  # number of agents
                 size=args.map_w,  # size of the grid
                 density=args.obstacle_density,  # obstacle density
@@ -390,7 +388,7 @@ def main():
                 collision_system=args.collision_system,
                 on_target=args.on_target,
             )
-            grid_configs.append(grid_config)
+        grid_config = _grid_config_generator(seeds[0])
     else:
         raise ValueError(f"Unsupported map type: {args.map_type}.")
 
@@ -661,7 +659,7 @@ def main():
             print("Starting Validation")
 
             for graph_id in range(train_id_max, cur_validation_id_max):
-                success, env, observations = run_model_on_grid(grid_configs[graph_id])
+                success, env, observations = run_model_on_grid(_grid_config_generator(seeds[graph_id]))
 
                 if success:
                     num_completed += 1
