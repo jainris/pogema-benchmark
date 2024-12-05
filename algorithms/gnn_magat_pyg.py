@@ -31,6 +31,8 @@ if typing.TYPE_CHECKING:
 else:
     from torch.jit import _overload_method as overload
 
+from torch_geometric.nn import HypergraphConv, GCNConv
+
 
 class MAGATAdditiveConv(MessagePassing):
     r"""The graph attentional operator from the `"Graph Attention Networks"
@@ -746,9 +748,7 @@ class MAGATAdditiveConv2(MessagePassing):
         # and target nodes (if present):
         alpha_src = (self.lin_att_src(x).view(-1, H, C)).sum(dim=-1)
         alpha_dst = (
-            None
-            if x_dst is None
-            else (self.lin_att_dst(x).view(-1, H, C)).sum(-1)
+            None if x_dst is None else (self.lin_att_dst(x).view(-1, H, C)).sum(-1)
         )
         alpha = (alpha_src, alpha_dst)
 
@@ -1246,3 +1246,32 @@ class MAGATMultiplicativeConv(MessagePassing):
             f"{self.__class__.__name__}({self.in_channels}, "
             f"{self.out_channels}, heads={self.heads})"
         )
+
+
+class HGAT(torch.nn.Module):
+    def __init__(
+        self, in_channels, out_channels, heads=1, hyperedge_feature_generator="gcn"
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.heads = heads
+
+        self.conv = HypergraphConv(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            use_attention=True,
+            heads=heads,
+        )
+        if hyperedge_feature_generator == "gcn":
+            self.hyperedge_feature_generator = GCNConv(
+                in_channels=in_channels, out_channels=in_channels, add_self_loops=False
+            )
+        else:
+            raise ValueError(
+                f"{hyperedge_feature_generator} Hyperedge Feature Generator not supported."
+            )
+
+    def forward(self, x, edge_index):
+        hyperedge_attr = self.hyperedge_feature_generator(x, edge_index)
+        return self.conv(x, edge_index, hyperedge_attr=hyperedge_attr)

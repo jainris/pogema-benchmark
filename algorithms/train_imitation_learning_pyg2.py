@@ -34,6 +34,7 @@ from run_expert import (
 )
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2, MAGATMultiplicativeConv
+from gnn_magat_pyg import HGAT
 
 
 def GNNFactory(
@@ -70,12 +71,19 @@ def GNNFactory(
                 f"Currently, we don't support attention mode: {attentionMode}"
             )
     elif model_type == "HGNN":
-        return HypergraphConv(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            use_attention=model_kwargs["use_attention"],
-            heads=num_attention_heads,
-        )
+        if model_kwargs["use_attention"]:
+            return HGAT(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+            )
+        else:
+            return HypergraphConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                use_attention=model_kwargs["use_attention"],
+                heads=num_attention_heads,
+            )
     else:
         raise ValueError(f"Currently, we don't support model: {model_type}")
 
@@ -642,7 +650,9 @@ def main():
             "train_loss": total_loss / n_batches,
             "train_accuracy": tot_correct / num_samples,
         }
-        if (not args.skip_validation) and ((epoch + 1) % args.validation_every_epochs == 0):
+        if (not args.skip_validation) and (
+            (epoch + 1) % args.validation_every_epochs == 0
+        ):
             model = model.eval()
 
             num_completed = 0
