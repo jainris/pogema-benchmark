@@ -328,6 +328,10 @@ def main():
     )
     parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
 
+    parser.add_argument(
+        "--skip_validation", action=argparse.BooleanOptionalAction, default=False
+    )
+
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--device", type=int, default=None)
     parser.add_argument("--initial_val_size", type=int, default=128)
@@ -518,7 +522,7 @@ def main():
                     args.hypergraph_num_steps,
                     move_results,
                 )
-                gdata = MAPFHypergraphDataset(gdata, [hindex])
+                gdata = MAPFHypergraphDataset(gdata, [hindex])[0]
             else:
                 gdata = MAPFGraphDataset(gdata)[0]
 
@@ -638,7 +642,7 @@ def main():
             "train_loss": total_loss / n_batches,
             "train_accuracy": tot_correct / num_samples,
         }
-        if (epoch + 1) % args.validation_every_epochs == 0:
+        if (not args.skip_validation) and ((epoch + 1) % args.validation_every_epochs == 0):
             model = model.eval()
 
             num_completed = 0
