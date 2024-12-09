@@ -524,10 +524,12 @@ def main():
         file_name += f"_{key}_{dict_args[key]}"
     file_name = file_name[1:] + ".pkl"
 
+    print("Loading Dataset.....")
     path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
     with open(path, "rb") as f:
         dense_dataset = pickle.load(f)
     if hypergraph_model:
+        print("Loading Hypergraphs.....")
         file_name = get_hypergraph_file_name(args)
         path = pathlib.Path(args.dataset_dir, "hypergraphs", file_name)
         with open(path, "rb") as f:
@@ -645,6 +647,7 @@ def main():
 
     queue = Queue()
 
+    print("Starting Training....")
     for epoch in range(args.num_epochs):
         total_loss = 0.0
         tot_correct = 0
@@ -767,7 +770,8 @@ def main():
                 oe_dataset = []
                 oe_hindices = []
 
-                for graph_id in oe_ids:
+                for i, graph_id in enumerate(oe_ids):
+                    print(f"Running model on {i}/{args.num_run_oe} ", end="")
                     grid_config = GridConfig(
                         num_agents=num_agents,  # number of agents
                         size=args.map_w,  # size of the grid
@@ -786,6 +790,7 @@ def main():
                     )
 
                     if not success:
+                        print(f"-- Running OE ", end="")
                         expert = expert_algorithm(inference_config)
 
                         additional_data_func = (
@@ -830,10 +835,17 @@ def main():
                             )
                         if all_actions is not None:
                             if all(all_terminated[-1]):
+                                print(f"-- Success")
                                 oe_dataset.append(
                                     (all_observations, all_actions, all_terminated)
                                 )
                                 oe_hindices.extend(hindices)
+                            else:
+                                print(f"-- Fail")
+                        else:
+                            print(f"-- Error")
+                    else:
+                        print(f"-- Success")
                 while queue.qsize() > 0:
                     # Popping remaining elements, although no elements should remain
                     expert_results = queue.get()
