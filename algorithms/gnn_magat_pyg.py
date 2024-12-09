@@ -1337,11 +1337,13 @@ class HGAT(torch.nn.Module):
             use_attention=True,
             heads=heads,
         )
+        self.bipartite_hyperedge_feature_generator = False
         if hyperedge_feature_generator == "gcn":
             self.hyperedge_feature_generator = GCNConv(
                 in_channels=in_channels, out_channels=in_channels, add_self_loops=False
             )
         elif hyperedge_feature_generator == "bgcn":
+            self.bipartite_hyperedge_feature_generator = True
             self.hyperedge_feature_generator = BipartiteGCNConv(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -1354,7 +1356,7 @@ class HGAT(torch.nn.Module):
             )
 
     def forward(self, x, edge_index):
-        if self.hyperedge_feature_generator == "bgcn":
+        if self.bipartite_hyperedge_feature_generator:
             num_hyperedges = torch.max(edge_index, dim=-1)[0][1]
             hyperedge_attr = torch.zeros(
                 (num_hyperedges, self.in_channels), dtype=x.dtype, device=x.device
@@ -1381,11 +1383,13 @@ class HMAGAT(torch.nn.Module):
             out_channels=out_channels,
             heads=heads,
         )
+        self.bipartite_hyperedge_feature_generator = False
         if hyperedge_feature_generator == "gcn":
             self.hyperedge_feature_generator = GCNConv(
                 in_channels=in_channels, out_channels=in_channels, add_self_loops=False
             )
         elif hyperedge_feature_generator == "bgcn":
+            self.bipartite_hyperedge_feature_generator = True
             self.hyperedge_feature_generator = BipartiteGCNConv(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -1398,7 +1402,7 @@ class HMAGAT(torch.nn.Module):
             )
 
     def forward(self, x, edge_index):
-        if self.hyperedge_feature_generator == "bgcn":
+        if self.bipartite_hyperedge_feature_generator:
             num_hyperedges = torch.max(edge_index, dim=-1)[0][1]
             hyperedge_attr = torch.zeros(
                 (num_hyperedges, self.in_channels), dtype=x.dtype, device=x.device
@@ -1425,11 +1429,13 @@ class HMAGAT2(torch.nn.Module):
             out_channels=out_channels,
             heads=heads,
         )
+        self.bipartite_hyperedge_feature_generator = False
         if hyperedge_feature_generator == "gcn":
             self.hyperedge_feature_generator = GCNConv(
                 in_channels=in_channels, out_channels=in_channels, add_self_loops=False
             )
         elif hyperedge_feature_generator == "bgcn":
+            self.bipartite_hyperedge_feature_generator = True
             self.hyperedge_feature_generator = BipartiteGCNConv(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -1442,7 +1448,7 @@ class HMAGAT2(torch.nn.Module):
             )
 
     def forward(self, x, edge_index):
-        if self.hyperedge_feature_generator == "bgcn":
+        if self.bipartite_hyperedge_feature_generator:
             num_hyperedges = torch.max(edge_index, dim=-1)[0][1]
             hyperedge_attr = torch.zeros(
                 (num_hyperedges, self.in_channels), dtype=x.dtype, device=x.device
