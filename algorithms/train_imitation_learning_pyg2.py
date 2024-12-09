@@ -34,7 +34,7 @@ from run_expert import (
 )
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2, MAGATMultiplicativeConv
-from gnn_magat_pyg import HGAT, HMAGAT
+from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2
 
 
 def GNNFactory(
@@ -90,6 +90,14 @@ def GNNFactory(
             in_channels=in_channels,
             out_channels=out_channels,
             heads=num_attention_heads,
+            hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
+        )
+    elif model_type == "HMAGAT2":
+        return HMAGAT2(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            heads=num_attention_heads,
+            hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
         )
     else:
         raise ValueError(f"Currently, we don't support model: {model_type}")
@@ -453,7 +461,7 @@ def main():
         ).to(device)
     elif args.imitation_learning_model == "HMAGAT":
         hypergraph_model = True
-        gnn_kwargs = dict()
+        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
         model = DecentralPlannerGATNet(
             FOV=args.obs_radius,
             numInputFeatures=args.embedding_size,
@@ -461,6 +469,19 @@ def main():
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
             gnn_type="HMAGAT",
+            gnn_kwargs=gnn_kwargs,
+            concat_attention=True,
+        ).to(device)
+    elif args.imitation_learning_model == "HMAGAT2":
+        hypergraph_model = True
+        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
+        model = DecentralPlannerGATNet(
+            FOV=args.obs_radius,
+            numInputFeatures=args.embedding_size,
+            num_layers_gnn=args.num_gnn_layers,
+            num_attention_heads=args.num_attention_heads,
+            use_dropout=True,
+            gnn_type="HMAGAT2",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)
