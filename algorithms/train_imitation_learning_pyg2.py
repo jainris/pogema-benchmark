@@ -34,7 +34,7 @@ from run_expert import (
 )
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2, MAGATMultiplicativeConv
-from gnn_magat_pyg import HGAT
+from gnn_magat_pyg import HGAT, HMAGAT
 
 
 def GNNFactory(
@@ -70,7 +70,7 @@ def GNNFactory(
             raise ValueError(
                 f"Currently, we don't support attention mode: {attentionMode}"
             )
-    elif model_type == "HGNN":
+    elif model_type == "HCHA":
         if model_kwargs["use_attention"]:
             return HGAT(
                 in_channels=in_channels,
@@ -84,6 +84,12 @@ def GNNFactory(
                 use_attention=model_kwargs["use_attention"],
                 heads=num_attention_heads,
             )
+    elif model_type == "HMAGAT":
+        return HMAGAT(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            heads=num_attention_heads,
+        )
     else:
         raise ValueError(f"Currently, we don't support model: {model_type}")
 
@@ -422,7 +428,7 @@ def main():
             num_layers_gnn=args.num_gnn_layers,
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
-            gnn_type="HGNN",
+            gnn_type="HCHA",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)
@@ -435,7 +441,20 @@ def main():
             num_layers_gnn=args.num_gnn_layers,
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
-            gnn_type="HGNN",
+            gnn_type="HCHA",
+            gnn_kwargs=gnn_kwargs,
+            concat_attention=True,
+        ).to(device)
+    elif args.imitation_learning_model == "HMAGAT":
+        hypergraph_model = True
+        gnn_kwargs = dict()
+        model = DecentralPlannerGATNet(
+            FOV=args.obs_radius,
+            numInputFeatures=args.embedding_size,
+            num_layers_gnn=args.num_gnn_layers,
+            num_attention_heads=args.num_attention_heads,
+            use_dropout=True,
+            gnn_type="HMAGAT",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)

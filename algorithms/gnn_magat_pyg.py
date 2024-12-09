@@ -1151,7 +1151,10 @@ class MAGATMultiplicativeConv(MessagePassing):
         #     if x_dst is None
         #     else (self.lin_att(x).view(-1, H, C) * self.att_dst).sum(-1)
         # )
-        alpha = (x, x)
+        if isinstance(x, Tensor):
+            alpha = (x, x)
+        else:
+            alpha = x
 
         if self.add_self_loops:
             if isinstance(edge_index, Tensor):
@@ -1275,3 +1278,31 @@ class HGAT(torch.nn.Module):
     def forward(self, x, edge_index):
         hyperedge_attr = self.hyperedge_feature_generator(x, edge_index)
         return self.conv(x, edge_index, hyperedge_attr=hyperedge_attr)
+
+
+class HMAGAT(torch.nn.Module):
+    def __init__(
+        self, in_channels, out_channels, heads=1, hyperedge_feature_generator="gcn"
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.heads = heads
+
+        self.conv = MAGATMultiplicativeConv(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            heads=heads,
+        )
+        if hyperedge_feature_generator == "gcn":
+            self.hyperedge_feature_generator = GCNConv(
+                in_channels=in_channels, out_channels=in_channels, add_self_loops=False
+            )
+        else:
+            raise ValueError(
+                f"{hyperedge_feature_generator} Hyperedge Feature Generator not supported."
+            )
+
+    def forward(self, x, edge_index):
+        hyperedge_attr = self.hyperedge_feature_generator(x, edge_index)
+        return self.conv((x, hyperedge_attr), edge_index)
