@@ -34,7 +34,7 @@ from run_expert import (
 )
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2, MAGATMultiplicativeConv
-from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2
+from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2, HMAGAT3
 
 
 def GNNFactory(
@@ -94,6 +94,13 @@ def GNNFactory(
         )
     elif model_type == "HMAGAT2":
         return HMAGAT2(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            heads=num_attention_heads,
+            hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
+        )
+    elif model_type == "HMAGAT3":
+        return HMAGAT3(
             in_channels=in_channels,
             out_channels=out_channels,
             heads=num_attention_heads,
@@ -482,6 +489,19 @@ def main():
             num_attention_heads=args.num_attention_heads,
             use_dropout=True,
             gnn_type="HMAGAT2",
+            gnn_kwargs=gnn_kwargs,
+            concat_attention=True,
+        ).to(device)
+    elif args.imitation_learning_model == "HMAGAT3":
+        hypergraph_model = True
+        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
+        model = DecentralPlannerGATNet(
+            FOV=args.obs_radius,
+            numInputFeatures=args.embedding_size,
+            num_layers_gnn=args.num_gnn_layers,
+            num_attention_heads=args.num_attention_heads,
+            use_dropout=True,
+            gnn_type="HMAGAT3",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
         ).to(device)

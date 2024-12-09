@@ -1351,13 +1351,18 @@ class BaseHypergraph(torch.nn.Module):
 
     def generate_hyperedge_features(self, x, edge_index):
         if self.bipartite_hyperedge_feature_generator:
-            num_hyperedges = torch.max(edge_index, dim=-1)[0][1] + 1
-            hyperedge_attr = torch.zeros(
-                (num_hyperedges, self.in_channels), dtype=x.dtype, device=x.device
-            )
-            hyperedge_attr = self.hyperedge_feature_generator(
-                (x, hyperedge_attr), edge_index
-            )
+            if edge_index.shape[1] > 0:
+                num_hyperedges = torch.max(edge_index, dim=-1)[0][1] + 1
+                hyperedge_attr = torch.zeros(
+                    (num_hyperedges, self.in_channels), dtype=x.dtype, device=x.device
+                )
+                hyperedge_attr = self.hyperedge_feature_generator(
+                    (x, hyperedge_attr), edge_index
+                )
+            else:
+                hyperedge_attr = torch.zeros(
+                    (0, self.in_channels), dtype=x.dtype, device=x.device
+                )
         else:
             hyperedge_attr = self.hyperedge_feature_generator(x, edge_index)
         return hyperedge_attr
@@ -1433,6 +1438,41 @@ class HMAGAT2(BaseHypergraph):
             out_channels=out_channels,
             heads=heads,
         )
+
+    def forward(self, x, edge_index):
+        hyperedge_attr = self.generate_hyperedge_features(x, edge_index)
+        edge_index = edge_index[[1, 0]]
+        return self.conv((hyperedge_attr, x), edge_index)
+
+
+class HMAGAT3(BaseHypergraph):
+    def __init__(
+        self, in_channels, out_channels, heads=1, hyperedge_feature_generator="gcn"
+    ):
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            hyperedge_feature_generator=hyperedge_feature_generator,
+        )
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.heads = heads
+
+        if self.bipartite_hyperedge_feature_generator:
+            self.conv = MAGATMultiplicativeConv(
+                in_channels=[in_channels, in_channels],
+                out_channels=out_channels,
+                heads=heads,
+                add_self_loops=False,
+                residual=True,
+            )
+        else:
+            self.conv = MAGATMultiplicativeConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=heads,
+                add_self_loops=False,
+            )
 
     def forward(self, x, edge_index):
         hyperedge_attr = self.generate_hyperedge_features(x, edge_index)
