@@ -992,6 +992,9 @@ class MAGATMultiplicativeConv(MessagePassing):
                 in_channels[0], heads * in_channels[0], bias=False, weight_initializer="glorot"
             )
 
+        assert in_channels[0] == in_channels[1], "Currently, only support this"
+        self.in_channels = in_channels[0]
+
         if edge_dim is not None:
             self.lin_edge = Linear(
                 edge_dim, heads * out_channels, bias=False, weight_initializer="glorot"
