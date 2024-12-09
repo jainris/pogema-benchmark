@@ -7,21 +7,23 @@ from pogema import pogema_v0, GridConfig
 
 from lacam.inference import LacamInference, LacamInferenceConfig
 
-DATASET_FILE_NAME_KEYS = [
-    "expert_algorithm",
-    "map_type",
-    "map_h",
-    "map_w",
-    "robot_density",
-    "obstacle_density",
-    "max_episode_steps",
-    "obs_radius",
-    "num_samples",
-    "dataset_seed",
-    "save_termination_state",
-    "collision_system",
-    "on_target",
-]
+DATASET_FILE_NAME_DEFAULT = {
+    "expert_algorithm": "LaCAM",
+    "map_type": "RandomGrid",
+    "map_h": 20,
+    "map_w": 20,
+    "robot_density": 0.025,
+    "obstacle_density": 0.1,
+    "max_episode_steps": 128,
+    "obs_radius": 4,
+    "num_samples": 30000,
+    "dataset_seed": 42,
+    "save_termination_state": True,
+    "collision_system": "soft",
+    "on_target": "nothing",
+}
+
+DATASET_FILE_NAME_KEYS = list(DATASET_FILE_NAME_DEFAULT.keys())
 
 
 def add_expert_dataset_args(parser):

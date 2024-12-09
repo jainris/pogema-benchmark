@@ -7,13 +7,33 @@ import torch
 from pogema import pogema_v0, GridConfig
 from scipy.spatial.distance import squareform, pdist
 
-from run_expert import DATASET_FILE_NAME_KEYS, add_expert_dataset_args
+from run_expert import (
+    DATASET_FILE_NAME_KEYS,
+    DATASET_FILE_NAME_DEFAULT,
+    add_expert_dataset_args,
+)
+
+HYPERGRAPH_FILE_NAME_DEFAULTS = {
+    "hypergraph_greedy_distance": 2,
+    "hypergraph_num_steps": 3,
+}
+HYPERGRAPH_FILE_NAME_KEYS = list(HYPERGRAPH_FILE_NAME_DEFAULTS.keys())
 
 
-HYPERGRAPH_FILE_NAME_KEYS = [
-    "hypergraph_greedy_distance",
-    "hypergraph_num_steps",
-]
+def get_hypergraph_file_name(args):
+    file_name = ""
+    dict_args = vars(args)
+    for key in sorted(DATASET_FILE_NAME_KEYS):
+        if dict_args[key] != DATASET_FILE_NAME_DEFAULT[key]:
+            file_name += f"_{key}_{dict_args[key]}"
+    for key in sorted(HYPERGRAPH_FILE_NAME_KEYS):
+        if dict_args[key] != HYPERGRAPH_FILE_NAME_DEFAULTS[key]:
+            file_name += f"_{key}_{dict_args[key]}"
+    if len(file_name) > 0:
+        file_name = file_name[1:] + ".pkl"
+    else:
+        file_name = "default.pkl"
+    return file_name
 
 
 def get_one_hot_bool(vector):
@@ -238,15 +258,8 @@ def main():
             all_hypergraphs.append(hypergraph_index)
             env.step(actions)
 
-    file_name = ""
-    dict_args = vars(args)
-    for key in sorted(DATASET_FILE_NAME_KEYS):
-        file_name += f"_{key}_{dict_args[key]}"
-    for key in sorted(HYPERGRAPH_FILE_NAME_KEYS):
-        file_name += f"_{key}_{dict_args[key]}"
-    file_name = file_name[1:] + ".pkl"
+    file_name = get_hypergraph_file_name(args)
     path = pathlib.Path(f"{args.dataset_dir}", "hypergraphs", f"{file_name}")
-
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
         pickle.dump(all_hypergraphs, f)

@@ -26,7 +26,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, HypergraphConv
 
 from convert_to_imitation_dataset import generate_graph_dataset
-from generate_hypergraphs import generate_hypergraph_indices, HYPERGRAPH_FILE_NAME_KEYS
+from generate_hypergraphs import generate_hypergraph_indices, get_hypergraph_file_name
 from run_expert import (
     DATASET_FILE_NAME_KEYS,
     run_expert_algorithm,
@@ -458,18 +458,12 @@ def main():
         file_name += f"_{key}_{dict_args[key]}"
     file_name = file_name[1:] + ".pkl"
 
-    path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
+    path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
     with open(path, "rb") as f:
         dense_dataset = pickle.load(f)
     if hypergraph_model:
-        file_name = ""
-        dict_args = vars(args)
-        for key in sorted(DATASET_FILE_NAME_KEYS):
-            file_name += f"_{key}_{dict_args[key]}"
-        for key in sorted(HYPERGRAPH_FILE_NAME_KEYS):
-            file_name += f"_{key}_{dict_args[key]}"
-        file_name = file_name[1:] + ".pkl"
-        path = pathlib.Path(f"{args.dataset_dir}", "hypergraphs", f"{file_name}")
+        file_name = get_hypergraph_file_name(args)
+        path = pathlib.Path(args.dataset_dir, "hypergraphs", file_name)
         with open(path, "rb") as f:
             hyper_edge_indices = pickle.load(f)
 
