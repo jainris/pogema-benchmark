@@ -76,6 +76,7 @@ def GNNFactory(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 heads=num_attention_heads,
+                hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
             )
         else:
             return HypergraphConv(
@@ -357,6 +358,8 @@ def main():
     parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
     parser.add_argument("--hypergraph_num_steps", type=int, default=3)
 
+    parser.add_argument("--hyperedge_feature_generator", type=str, default="gcn")
+
     args = parser.parse_args()
     print(args)
 
@@ -434,7 +437,10 @@ def main():
         ).to(device)
     elif args.imitation_learning_model == "HGAT":
         hypergraph_model = True
-        gnn_kwargs = {"use_attention": True}
+        gnn_kwargs = {
+            "use_attention": True,
+            "hyperedge_feature_generator": args.hyperedge_feature_generator,
+        }
         model = DecentralPlannerGATNet(
             FOV=args.obs_radius,
             numInputFeatures=args.embedding_size,

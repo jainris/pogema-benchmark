@@ -1251,6 +1251,77 @@ class MAGATMultiplicativeConv(MessagePassing):
         )
 
 
+class BipartiteGCNConv(MessagePassing):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        improved: bool = False,
+        cached: bool = False,
+        add_self_loops: Optional[bool] = None,
+        normalize: bool = True,
+        bias: bool = True,
+        **kwargs,
+    ):
+        kwargs.setdefault("aggr", "add")
+        super().__init__(**kwargs)
+
+        if add_self_loops is None:
+            add_self_loops = normalize
+
+        if add_self_loops and not normalize:
+            raise ValueError(
+                f"'{self.__class__.__name__}' does not support "
+                f"adding self-loops to the graph when no "
+                f"on-the-fly normalization is applied"
+            )
+
+        assert (
+            not normalize
+        ), "Currently, we do not support normalization with BipartiteGCNConv."
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.improved = improved
+        self.cached = cached
+        self.add_self_loops = add_self_loops
+        self.normalize = normalize
+
+        self.lin = Linear(
+            in_channels, out_channels, bias=False, weight_initializer="glorot"
+        )
+
+        if bias:
+            self.bias = Parameter(torch.empty(out_channels))
+        else:
+            self.register_parameter("bias", None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        super().reset_parameters()
+        self.lin.reset_parameters()
+        zeros(self.bias)
+
+    def forward(
+        self, x: OptPairTensor, edge_index: Adj, edge_weight: OptTensor = None
+    ) -> Tensor:
+        x_src, x_dst = x
+        x_src = self.lin(x_src)
+        x = x_src, x_dst
+
+        # propagate_type: (x: Tensor, edge_weight: OptTensor)
+        out = self.propagate(edge_index, x=x, edge_weight=edge_weight)
+
+        if self.bias is not None:
+            out = out + self.bias
+
+        return out
+
+    def message(self, x_j: Tensor, edge_weight: OptTensor) -> Tensor:
+        return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
+
+
 class HGAT(torch.nn.Module):
     def __init__(
         self, in_channels, out_channels, heads=1, hyperedge_feature_generator="gcn"
@@ -1269,6 +1340,13 @@ class HGAT(torch.nn.Module):
         if hyperedge_feature_generator == "gcn":
             self.hyperedge_feature_generator = GCNConv(
                 in_channels=in_channels, out_channels=in_channels, add_self_loops=False
+            )
+        elif hyperedge_feature_generator == "bgcn":
+            self.hyperedge_feature_generator = BipartiteGCNConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                add_self_loops=False,
+                normalize=False,
             )
         else:
             raise ValueError(
