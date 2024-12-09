@@ -978,6 +978,9 @@ class MAGATMultiplicativeConv(MessagePassing):
                 bias=False,
                 weight_initializer="glorot",
             )
+            self.lin_att = Linear(
+                in_channels, heads * in_channels, bias=False, weight_initializer="glorot"
+            )
         else:
             self.lin_src = Linear(
                 in_channels[0], heads * out_channels, False, weight_initializer="glorot"
@@ -985,9 +988,9 @@ class MAGATMultiplicativeConv(MessagePassing):
             self.lin_dst = Linear(
                 in_channels[1], heads * out_channels, False, weight_initializer="glorot"
             )
-        self.lin_att = Linear(
-            in_channels, heads * in_channels, bias=False, weight_initializer="glorot"
-        )
+            self.lin_att = Linear(
+                in_channels[0], heads * in_channels[0], bias=False, weight_initializer="glorot"
+            )
 
         if edge_dim is not None:
             self.lin_edge = Linear(
@@ -1030,6 +1033,8 @@ class MAGATMultiplicativeConv(MessagePassing):
             self.lin_edge.reset_parameters()
         if self.res is not None:
             self.res.reset_parameters()
+        if self.lin_att is not None:
+            self.lin_att.reset_parameters()
         glorot(self.att_edge)
         zeros(self.bias)
 
