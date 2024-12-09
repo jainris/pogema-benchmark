@@ -26,7 +26,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, HypergraphConv
 
 from convert_to_imitation_dataset import generate_graph_dataset
-from generate_hypergraphs import generate_hypergraph_indices
+from generate_hypergraphs import generate_hypergraph_indices, HYPERGRAPH_FILE_NAME_KEYS
 from run_expert import (
     DATASET_FILE_NAME_KEYS,
     run_expert_algorithm,
@@ -388,6 +388,7 @@ def main():
                 collision_system=args.collision_system,
                 on_target=args.on_target,
             )
+
         grid_config = _grid_config_generator(seeds[0])
     else:
         raise ValueError(f"Unsupported map type: {args.map_type}.")
@@ -461,6 +462,13 @@ def main():
     with open(path, "rb") as f:
         dense_dataset = pickle.load(f)
     if hypergraph_model:
+        file_name = ""
+        dict_args = vars(args)
+        for key in sorted(DATASET_FILE_NAME_KEYS):
+            file_name += f"_{key}_{dict_args[key]}"
+        for key in sorted(HYPERGRAPH_FILE_NAME_KEYS):
+            file_name += f"_{key}_{dict_args[key]}"
+        file_name = file_name[1:] + ".pkl"
         path = pathlib.Path(f"{args.dataset_dir}", "hypergraphs", f"{file_name}")
         with open(path, "rb") as f:
             hyper_edge_indices = pickle.load(f)
@@ -659,7 +667,9 @@ def main():
             print("Starting Validation")
 
             for graph_id in range(train_id_max, cur_validation_id_max):
-                success, env, observations = run_model_on_grid(_grid_config_generator(seeds[graph_id]))
+                success, env, observations = run_model_on_grid(
+                    _grid_config_generator(seeds[graph_id])
+                )
 
                 if success:
                     num_completed += 1

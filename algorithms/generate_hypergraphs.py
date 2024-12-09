@@ -10,6 +10,12 @@ from scipy.spatial.distance import squareform, pdist
 from run_expert import DATASET_FILE_NAME_KEYS, add_expert_dataset_args
 
 
+HYPERGRAPH_FILE_NAME_KEYS = [
+    "hypergraph_greedy_distance",
+    "hypergraph_num_steps",
+]
+
+
 def get_one_hot_bool(vector):
     if "eye" not in get_one_hot_bool.__dict__:
         get_one_hot_bool.eye = np.eye(2, dtype=bool)
@@ -232,6 +238,13 @@ def main():
             all_hypergraphs.append(hypergraph_index)
             env.step(actions)
 
+    file_name = ""
+    dict_args = vars(args)
+    for key in sorted(DATASET_FILE_NAME_KEYS):
+        file_name += f"_{key}_{dict_args[key]}"
+    for key in sorted(HYPERGRAPH_FILE_NAME_KEYS):
+        file_name += f"_{key}_{dict_args[key]}"
+    file_name = file_name[1:] + ".pkl"
     path = pathlib.Path(f"{args.dataset_dir}", "hypergraphs", f"{file_name}")
 
     path.parent.mkdir(parents=True, exist_ok=True)
