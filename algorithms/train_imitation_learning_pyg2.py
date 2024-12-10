@@ -657,6 +657,7 @@ def main():
             hypergraph_greedy_distance=args.hypergraph_greedy_distance,
             hypergraph_num_steps=args.hypergraph_num_steps,
             move_results=move_results,
+            generate_graph=args.generate_graph_from_hyperedges,
         )
 
     queue = Queue()
