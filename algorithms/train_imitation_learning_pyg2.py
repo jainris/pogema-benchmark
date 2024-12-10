@@ -826,6 +826,7 @@ def main():
                         p.start()
 
                         all_actions, all_observations, all_terminated = None, None, None
+                        expert_results = None
                         hindices = []
                         while True:
                             try:
@@ -837,18 +838,18 @@ def main():
                                 if p.exitcode is not None:
                                     break
 
-                        if hypergraph_model:
-                            (
-                                all_actions,
-                                all_observations,
-                                all_terminated,
-                                hindices,
-                            ) = expert_results
-                        else:
-                            all_actions, all_observations, all_terminated = (
-                                expert_results
-                            )
-                        if all_actions is not None:
+                        if expert_results is not None:
+                            if hypergraph_model:
+                                (
+                                    all_actions,
+                                    all_observations,
+                                    all_terminated,
+                                    hindices,
+                                ) = expert_results
+                            else:
+                                all_actions, all_observations, all_terminated = (
+                                    expert_results
+                                )
                             if all(all_terminated[-1]):
                                 print(f"-- Success")
                                 oe_dataset.append(
