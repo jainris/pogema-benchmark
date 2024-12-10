@@ -371,6 +371,7 @@ def main():
 
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--device", type=int, default=None)
+    parser.add_argument("--model_seed", type=int, default=42)
     parser.add_argument("--initial_val_size", type=int, default=128)
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
     parser.add_argument("--num_run_oe", type=int, default=500)
@@ -381,6 +382,11 @@ def main():
     parser.add_argument("--hypergraph_num_steps", type=int, default=3)
 
     parser.add_argument("--hyperedge_feature_generator", type=str, default="gcn")
+    parser.add_argument(
+        "--generate_graph_from_hyperedges",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
 
     args = parser.parse_args()
     print(args)
@@ -430,7 +436,8 @@ def main():
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
 
-    hypergraph_model = False
+    torch.manual_seed(args.model_seed)
+    hypergraph_model = args.generate_graph_from_hyperedges
     if args.imitation_learning_model == "MAGAT":
         gnn_kwargs = {"attentionMode": args.attention_mode}
         model = DecentralPlannerGATNet(

@@ -29,6 +29,8 @@ def get_hypergraph_file_name(args):
     for key in sorted(HYPERGRAPH_FILE_NAME_KEYS):
         if dict_args[key] != HYPERGRAPH_FILE_NAME_DEFAULTS[key]:
             file_name += f"_{key}_{dict_args[key]}"
+    if args.generate_graph_from_hyperedges:
+        file_name += "_graph"
     if len(file_name) > 0:
         file_name = file_name[1:] + ".pkl"
     else:
@@ -152,8 +154,23 @@ def get_unique_groups(groups):
     return unique_groups
 
 
+def generate_graph_instead(unique_groups, num_agents, remove_self_loops=True):
+    Adj = torch.zeros((num_agents, num_agents))
+    for nodes in unique_groups:
+        for i in nodes:
+            for j in nodes:
+                Adj[i][j] = 1
+    if remove_self_loops:
+        Adj *= 1 - torch.eye(num_agents)
+    return Adj.nonzero().t()
+
+
 def generate_hypergraph_indices(
-    env, hypergraph_greedy_distance, hypergraph_num_steps, move_results
+    env,
+    hypergraph_greedy_distance,
+    hypergraph_num_steps,
+    move_results,
+    generate_graph=False,
 ):
     target_pos = np.array(env.grid.get_targets_xy())
     agent_pos = np.array(env.grid.get_agents_xy())
@@ -166,6 +183,11 @@ def generate_hypergraph_indices(
         _, agent_pos = greedy_step(target_pos, agent_pos, obstacles, move_results)
         groups = update_groups(agent_pos, groups, hypergraph_greedy_distance)
     unique_groups = get_unique_groups(groups)
+
+    if generate_graph:
+        # Instead of hypergraph, we generate a graph, with edges
+        # between all nodes in a hyperedge
+        return generate_graph_instead(unique_groups, agent_pos.shape[0])
 
     hypergraph_index = [[], []]
     for i, nodes in enumerate(unique_groups):
@@ -183,6 +205,11 @@ def main():
     parser.add_argument("--hypergraph_num_steps", type=int, default=3)
     parser.add_argument(
         "--take_all_seeds", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--generate_graph_from_hyperedges",
+        action=argparse.BooleanOptionalAction,
+        default=False,
     )
 
     args = parser.parse_args()
@@ -253,6 +280,7 @@ def main():
                 args.hypergraph_greedy_distance,
                 args.hypergraph_num_steps,
                 move_results,
+                args.generate_graph_from_hyperedges,
             )
 
             all_hypergraphs.append(hypergraph_index)

@@ -35,7 +35,7 @@ def add_expert_dataset_args(parser):
     parser.add_argument("--robot_density", type=float, default=0.025)
     parser.add_argument("--obstacle_density", type=float, default=0.1)
     parser.add_argument("--max_episode_steps", type=int, default=128)
-    parser.add_argument("--obs_radius", type=int, default=3)
+    parser.add_argument("--obs_radius", type=int, default=4)
     parser.add_argument("--collision_system", type=str, default="soft")
     parser.add_argument("--on_target", type=str, default="nothing")
 
