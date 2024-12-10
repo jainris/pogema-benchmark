@@ -33,7 +33,8 @@ from run_expert import (
     add_expert_dataset_args,
 )
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
-from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2, MAGATMultiplicativeConv
+from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2
+from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
 from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2, HMAGAT3
 
 
@@ -62,6 +63,12 @@ def GNNFactory(
             )
         elif attentionMode == "MAGAT_multiplicative":
             return MAGATMultiplicativeConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+            )
+        elif attentionMode == "MAGAT_multiplicative2":
+            return MAGATMultiplicativeConv2(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 heads=num_attention_heads,
