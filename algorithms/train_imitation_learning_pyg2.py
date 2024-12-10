@@ -611,6 +611,7 @@ def main():
                     args.hypergraph_greedy_distance,
                     args.hypergraph_num_steps,
                     move_results,
+                    args.generate_graph_from_hyperedges,
                 )
                 gdata = MAPFHypergraphDataset(gdata, [hindex])[0]
             else:
