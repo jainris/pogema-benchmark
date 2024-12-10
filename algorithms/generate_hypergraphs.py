@@ -29,12 +29,12 @@ def get_hypergraph_file_name(args):
     for key in sorted(HYPERGRAPH_FILE_NAME_KEYS):
         if dict_args[key] != HYPERGRAPH_FILE_NAME_DEFAULTS[key]:
             file_name += f"_{key}_{dict_args[key]}"
-    if args.generate_graph_from_hyperedges:
-        file_name += "_graph"
     if len(file_name) > 0:
         file_name = file_name[1:] + ".pkl"
     else:
         file_name = "default.pkl"
+    if args.generate_graph_from_hyperedges:
+        file_name = file_name[:-4] + "_graph.pkl"
     return file_name
 
 
