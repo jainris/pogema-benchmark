@@ -15,7 +15,7 @@ def get_imitation_dataset_file_name(args):
     for key in sorted(DATASET_FILE_NAME_KEYS):
         file_name += f"_{key}_{dict_args[key]}"
     if args.use_edge_attr:
-        file_name += "_edge_attr"
+        file_name += "_pos"
     file_name = file_name[1:] + ".pkl"
     return file_name
 
@@ -34,7 +34,7 @@ def generate_graph_dataset(
     dataset_target_actions = []
     dataset_terminated = []
     graph_map_id = []
-    dataset_edge_attr = []
+    dataset_agent_pos = []
 
     assert save_termination_state, "Only support saving termination state for now"
 
@@ -54,8 +54,7 @@ def generate_graph_dataset(
             Adj = Adj - np.diag(np.diag(Adj))
 
             if use_edge_attr:
-                src, dst = np.nonzero(Adj)
-                dataset_edge_attr.append(global_xys[src] - global_xys[dst])
+                dataset_agent_pos.append(global_xys)
 
             node_features = []
             for observation in observations:
@@ -116,8 +115,11 @@ def generate_graph_dataset(
         dataset_terminated,
         graph_map_id,
     )
+    if use_edge_attr:
+        dataset_agent_pos = np.stack(dataset_agent_pos)
+        result = (*result, dataset_agent_pos)
 
-    return tuple(torch.from_numpy(res) for res in result), dataset_edge_attr
+    return tuple(torch.from_numpy(res) for res in result)
 
 
 def main():
@@ -146,7 +148,7 @@ def main():
     if isinstance(dataset, tuple):
         dataset, seed_mask = dataset
 
-    graph_dataset, graph_edge_attr = generate_graph_dataset(
+    graph_dataset = generate_graph_dataset(
         dataset,
         args.comm_radius,
         args.obs_radius,
@@ -160,10 +162,7 @@ def main():
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
-        if args.use_edge_attr:
-            pickle.dump((graph_dataset, graph_edge_attr), f)    
-        else:
-            pickle.dump(graph_dataset, f)
+        pickle.dump((graph_dataset), f)
 
 
 if __name__ == "__main__":

@@ -30,16 +30,22 @@ def convert_dense_graph_dataset_to_sparse_pyg_dataset(dense_dataset):
     return new_graph_dataset, graph_map_id
 
 
+def decode_dense_dataset(dense_dataset, use_edge_attr):
+    if use_edge_attr:
+        return dense_dataset
+    return *dense_dataset, None
+
 class MAPFGraphDataset(Dataset):
-    def __init__(self, dense_dataset, dataset_edge_attr) -> None:
+    def __init__(self, dense_dataset, use_edge_attr) -> None:
         (
             self.dataset_node_features,
             self.dataset_Adj,
             self.dataset_target_actions,
             self.dataset_terminated,
             self.graph_map_id,
-        ) = dense_dataset
-        self.dataset_edge_attr = dataset_edge_attr
+            self.dataset_agent_pos
+        ) = decode_dense_dataset(dense_dataset, use_edge_attr)
+        self.use_edge_attr = use_edge_attr
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -47,10 +53,9 @@ class MAPFGraphDataset(Dataset):
     def __getitem__(self, index):
         edge_index, edge_weight = dense_to_sparse(self.dataset_Adj[index])
         edge_attr = None
-        if self.dataset_edge_attr is not None:
-            edge_attr = torch.tensor(
-                self.dataset_edge_attr[index], dtype=self.dataset_node_features.dtype
-            )
+        if self.use_edge_attr is not None:
+            agent_pos = self.dataset_agent_pos[index]
+            edge_attr = agent_pos[edge_index[0]] - agent_pos[edge_index[1]]
         return Data(
             x=self.dataset_node_features[index],
             edge_index=edge_index,
