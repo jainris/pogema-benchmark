@@ -23,7 +23,7 @@ import torch.optim as optim
 from graphs.weights_initializer import weights_init
 
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GATConv, HypergraphConv
+from torch_geometric.nn import GATConv, GATv2Conv, HypergraphConv
 
 from convert_to_imitation_dataset import generate_graph_dataset
 from generate_hypergraphs import generate_hypergraph_indices, get_hypergraph_file_name
@@ -38,83 +38,151 @@ from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
 from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2, HMAGAT3
 
 
+class GNNWrapper(torch.nn.Module):
+    def __init__(
+        self,
+        gnn,
+        use_edge_weights=False,
+        use_edge_attr=False,
+    ):
+        super().__init__()
+        assert (not use_edge_weights) or (
+            not use_edge_attr
+        ), "Currently, do not support use of both edge weights and edge attr"
+        self.use_edge_weights = use_edge_weights
+        self.use_edge_attr = use_edge_attr
+        self.gnn = gnn
+
+    def forward(self, x, data):
+        if self.use_edge_weights:
+            return self.gnn(x, data.edge_index, data.edge_weight)
+        if self.use_edge_attr:
+            return self.gnn(x, data.edge_index, data.edge_attr)
+        return self.gnn(x, data.edge_index)
+
+
 def GNNFactory(
-    in_channels, out_channels, num_attention_heads, model_type="MAGAT", **model_kwargs
+    in_channels,
+    out_channels,
+    num_attention_heads,
+    model_type="MAGAT",
+    use_edge_weights=False,
+    use_edge_attr=False,
+    edge_dim=None,
+    **model_kwargs,
 ):
-    if model_type == "MAGAT":
-        attentionMode = model_kwargs["attentionMode"]
-        if attentionMode == "GAT_origin":
-            return GATConv(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                heads=num_attention_heads,
-            )
-        elif attentionMode == "MAGAT_additive":
-            return MAGATAdditiveConv(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                heads=num_attention_heads,
-            )
-        elif attentionMode == "MAGAT_additive2":
-            return MAGATAdditiveConv2(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                heads=num_attention_heads,
-            )
-        elif attentionMode == "MAGAT_multiplicative":
-            return MAGATMultiplicativeConv(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                heads=num_attention_heads,
-            )
-        elif attentionMode == "MAGAT_multiplicative2":
-            return MAGATMultiplicativeConv2(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                heads=num_attention_heads,
-            )
-        else:
-            raise ValueError(
-                f"Currently, we don't support attention mode: {attentionMode}"
-            )
-    elif model_type == "HCHA":
-        if model_kwargs["use_attention"]:
-            return HGAT(
+    if use_edge_attr:
+        assert (
+            edge_dim is not None
+        ), "Expecting edge_dim to be given if using edge attributes"
+    elif use_edge_weights:
+        edge_dim = 1
+    else:
+        assert (
+            edge_dim is None
+        ), f"Not using edge attr or weights, so expect node_dim to be None, but got {edge_dim}"
+    kwargs = dict()
+    if edge_dim is not None:
+        kwargs = {"edge_dim": edge_dim}
+
+    def _factory():
+        if model_type == "MAGAT":
+            attentionMode = model_kwargs["attentionMode"]
+            if attentionMode == "GAT_origin" or attentionMode == "GAT":
+                return GATConv(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    heads=num_attention_heads,
+                    **kwargs,
+                )
+            elif attentionMode == "GATv2":
+                return GATv2Conv(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    heads=num_attention_heads,
+                    **kwargs,
+                )
+            elif attentionMode == "MAGAT_additive":
+                return MAGATAdditiveConv(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    heads=num_attention_heads,
+                    **kwargs,
+                )
+            elif attentionMode == "MAGAT_additive2":
+                return MAGATAdditiveConv2(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    heads=num_attention_heads,
+                    **kwargs,
+                )
+            elif attentionMode == "MAGAT_multiplicative":
+                return MAGATMultiplicativeConv(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    heads=num_attention_heads,
+                    **kwargs,
+                )
+            elif attentionMode == "MAGAT_multiplicative2":
+                return MAGATMultiplicativeConv2(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    heads=num_attention_heads,
+                    **kwargs,
+                )
+            else:
+                raise ValueError(
+                    f"Currently, we don't support attention mode: {attentionMode}"
+                )
+        elif model_type == "HCHA":
+            if model_kwargs["use_attention"]:
+                return HGAT(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    heads=num_attention_heads,
+                    hyperedge_feature_generator=model_kwargs[
+                        "hyperedge_feature_generator"
+                    ],
+                    **kwargs,
+                )
+            else:
+                return HypergraphConv(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    use_attention=model_kwargs["use_attention"],
+                    heads=num_attention_heads,
+                    **kwargs,
+                )
+        elif model_type == "HMAGAT":
+            return HMAGAT(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 heads=num_attention_heads,
                 hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
+                **kwargs,
             )
-        else:
-            return HypergraphConv(
+        elif model_type == "HMAGAT2":
+            return HMAGAT2(
                 in_channels=in_channels,
                 out_channels=out_channels,
-                use_attention=model_kwargs["use_attention"],
                 heads=num_attention_heads,
+                hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
+                **kwargs,
             )
-    elif model_type == "HMAGAT":
-        return HMAGAT(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            heads=num_attention_heads,
-            hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
-        )
-    elif model_type == "HMAGAT2":
-        return HMAGAT2(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            heads=num_attention_heads,
-            hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
-        )
-    elif model_type == "HMAGAT3":
-        return HMAGAT3(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            heads=num_attention_heads,
-            hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
-        )
-    else:
-        raise ValueError(f"Currently, we don't support model: {model_type}")
+        elif model_type == "HMAGAT3":
+            return HMAGAT3(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+                hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Currently, we don't support model: {model_type}")
+
+    return GNNWrapper(
+        _factory(), use_edge_weights=use_edge_weights, use_edge_attr=use_edge_attr
+    )
 
 
 class CNN(torch.nn.Module):
@@ -222,6 +290,9 @@ class DecentralPlannerGATNet(torch.nn.Module):
         cnn_output_size=None,
         num_layers_gnn=None,
         embedding_sizes_gnn=None,
+        use_edge_weights=False,
+        use_edge_attr=False,
+        edge_dim=None,
     ):
         super().__init__()
 
@@ -272,6 +343,9 @@ class DecentralPlannerGATNet(torch.nn.Module):
                 out_channels=embedding_sizes_gnn[0],
                 model_type=gnn_type,
                 num_attention_heads=num_attention_heads,
+                use_edge_weights=use_edge_weights,
+                use_edge_attr=use_edge_attr,
+                edge_dim=edge_dim,
                 **gnn_kwargs,
             )
         )
@@ -283,6 +357,9 @@ class DecentralPlannerGATNet(torch.nn.Module):
                     out_channels=embedding_sizes_gnn[i + 1],
                     model_type=gnn_type,
                     num_attention_heads=num_attention_heads,
+                    use_edge_weights=use_edge_weights,
+                    use_edge_attr=use_edge_attr,
+                    edge_dim=edge_dim,
                     **gnn_kwargs,
                 )
             )
@@ -322,10 +399,10 @@ class DecentralPlannerGATNet(torch.nn.Module):
             for lin in self.actionsMLP:
                 lin.reset_parameters()
 
-    def forward(self, x, edge_index):
+    def forward(self, x, data):
         x = self.cnn(x)
         for conv in self.gnns:
-            x = conv(x, edge_index)
+            x = conv(x, data)
             x = F.relu(x)
         for lin in self.actionsMLP[:-1]:
             x = lin(x)
@@ -388,6 +465,14 @@ def main():
         default=False,
     )
 
+    parser.add_argument(
+        "--use_edge_weights", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--use_edge_attr", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument("--edge_dim", type=int, default=None)
+
     args = parser.parse_args()
     print(args)
 
@@ -449,6 +534,9 @@ def main():
             gnn_type="MAGAT",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
+            use_edge_weights=args.use_edge_weights,
+            use_edge_attr=args.use_edge_attr,
+            edge_dim=args.edge_dim,
         ).to(device)
         model.reset_parameters()
     elif args.imitation_learning_model == "HGCN":
@@ -463,6 +551,9 @@ def main():
             gnn_type="HCHA",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
+            use_edge_weights=args.use_edge_weights,
+            use_edge_attr=args.use_edge_attr,
+            edge_dim=args.edge_dim,
         ).to(device)
     elif args.imitation_learning_model == "HGAT":
         hypergraph_model = True
@@ -479,6 +570,9 @@ def main():
             gnn_type="HCHA",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
+            use_edge_weights=args.use_edge_weights,
+            use_edge_attr=args.use_edge_attr,
+            edge_dim=args.edge_dim,
         ).to(device)
     elif args.imitation_learning_model == "HMAGAT":
         hypergraph_model = True
@@ -492,6 +586,9 @@ def main():
             gnn_type="HMAGAT",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
+            use_edge_weights=args.use_edge_weights,
+            use_edge_attr=args.use_edge_attr,
+            edge_dim=args.edge_dim,
         ).to(device)
     elif args.imitation_learning_model == "HMAGAT2":
         hypergraph_model = True
@@ -505,6 +602,9 @@ def main():
             gnn_type="HMAGAT2",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
+            use_edge_weights=args.use_edge_weights,
+            use_edge_attr=args.use_edge_attr,
+            edge_dim=args.edge_dim,
         ).to(device)
     elif args.imitation_learning_model == "HMAGAT3":
         hypergraph_model = True
@@ -518,6 +618,9 @@ def main():
             gnn_type="HMAGAT3",
             gnn_kwargs=gnn_kwargs,
             concat_attention=True,
+            use_edge_weights=args.use_edge_weights,
+            use_edge_attr=args.use_edge_attr,
+            edge_dim=args.edge_dim,
         ).to(device)
     else:
         raise ValueError(
@@ -619,7 +722,7 @@ def main():
 
             gdata.to(device)
 
-            actions = model(gdata.x, gdata.edge_index)
+            actions = model(gdata.x, gdata)
             actions = torch.argmax(actions, dim=-1).detach().cpu()
 
             observations, rewards, terminated, truncated, infos = env.step(actions)
@@ -675,7 +778,7 @@ def main():
             data = data.to(device)
             optimizer.zero_grad()
 
-            out = model(data.x, data.edge_index)
+            out = model(data.x, data)
 
             out = out[~data.terminated]
             target_actions = data.y[~data.terminated]
@@ -707,7 +810,7 @@ def main():
                 data = data.to(device)
                 optimizer.zero_grad()
 
-                out = model(data.x, data.edge_index)
+                out = model(data.x, data)
 
                 out = out[~data.terminated]
                 target_actions = data.y[~data.terminated]

@@ -34,8 +34,9 @@ def generate_graph_dataset(
         for observations in sample_observations:
             global_xys = np.array([obs["global_xy"] for obs in observations])
 
-            Adj = squareform(pdist(global_xys, "euclidean")) <= comm_radius
-            Adj = Adj.astype(global_xys.dtype)
+            Adj = squareform(pdist(global_xys, "euclidean"))
+            mask = Adj <= comm_radius
+            Adj = Adj * mask
 
             Adj = Adj - np.diag(np.diag(Adj))
 

@@ -1003,12 +1003,13 @@ class MAGATMultiplicativeConv(MessagePassing):
 
         if edge_dim is not None:
             self.lin_edge = Linear(
-                edge_dim, heads * out_channels, bias=False, weight_initializer="glorot"
+                edge_dim,
+                heads * self.in_channels,
+                bias=False,
+                weight_initializer="glorot",
             )
-            self.att_edge = Parameter(torch.empty(1, heads, out_channels))
         else:
             self.lin_edge = None
-            self.register_parameter("att_edge", None)
 
         # The number of output channels:
         total_out_channels = out_channels * (heads if concat else 1)
@@ -1044,7 +1045,6 @@ class MAGATMultiplicativeConv(MessagePassing):
             self.res.reset_parameters()
         if self.lin_att is not None:
             self.lin_att.reset_parameters()
-        glorot(self.att_edge)
         zeros(self.bias)
 
     @overload
@@ -1241,14 +1241,16 @@ class MAGATMultiplicativeConv(MessagePassing):
         # Given edge-level attention coefficients for source and target nodes,
         # we simply need to sum them up to "emulate" concatenation:
         E = alpha_i.shape[0]
-        alpha_j = self.lin_att(alpha_j).reshape((E, self.heads, self.in_channels))
         alpha_i = alpha_i.reshape((E, self.in_channels, 1))
+        alpha_j = self.lin_att(alpha_j).reshape((E, self.heads, self.in_channels))
+        if edge_attr is not None and self.lin_edge is not None:
+            edge_attr = self.lin_edge(edge_attr)
+            edge_attr = edge_attr.reshape((E, self.heads, self.in_channels))
+            alpha_j += edge_attr
         alpha = torch.bmm(alpha_j, alpha_i)
         alpha = torch.squeeze(alpha, dim=-1)
         if index.numel() == 0:
             return alpha
-        if edge_attr is not None and self.lin_edge is not None:
-            assert "Not yet supported"
 
         alpha = F.leaky_relu(alpha, self.negative_slope)
         alpha = softmax(alpha, index, ptr, dim_size)
