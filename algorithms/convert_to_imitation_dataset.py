@@ -9,12 +9,24 @@ from scipy.spatial.distance import squareform, pdist
 from run_expert import DATASET_FILE_NAME_KEYS, add_expert_dataset_args
 
 
+def get_imitation_dataset_file_name(args):
+    file_name = ""
+    dict_args = vars(args)
+    for key in sorted(DATASET_FILE_NAME_KEYS):
+        file_name += f"_{key}_{dict_args[key]}"
+    if args.use_edge_attr:
+        file_name += "_edge_attr"
+    file_name = file_name[1:] + ".pkl"
+    return file_name
+
+
 def generate_graph_dataset(
     dataset,
     comm_radius,
     obs_radius,
     num_samples,
     save_termination_state,
+    use_edge_attr=False,
     print_prefix="",
 ):
     dataset_node_features = []
@@ -22,6 +34,7 @@ def generate_graph_dataset(
     dataset_target_actions = []
     dataset_terminated = []
     graph_map_id = []
+    dataset_edge_attr = []
 
     assert save_termination_state, "Only support saving termination state for now"
 
@@ -39,6 +52,10 @@ def generate_graph_dataset(
             Adj = Adj * mask
 
             Adj = Adj - np.diag(np.diag(Adj))
+
+            if use_edge_attr:
+                src, dst = np.nonzero(Adj)
+                dataset_edge_attr.append(global_xys[src] - global_xys[dst])
 
             node_features = []
             for observation in observations:
@@ -100,15 +117,17 @@ def generate_graph_dataset(
         graph_map_id,
     )
 
-    return tuple(torch.from_numpy(res) for res in result)
+    return tuple(torch.from_numpy(res) for res in result), dataset_edge_attr
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert to Imitation Learning Dataset")
+    parser = argparse.ArgumentParser(
+        description="Convert to Imitation Learning Dataset"
+    )
     parser = add_expert_dataset_args(parser)
 
     parser.add_argument("--comm_radius", type=int, default=7)
-    parser.add_argument("--dynamic_comm_radius", action="store_true", default=False)
+    parser.add_argument("--use_edge_attr", action="store_true", default=False)
 
     args = parser.parse_args()
     print(args)
@@ -127,19 +146,24 @@ def main():
     if isinstance(dataset, tuple):
         dataset, seed_mask = dataset
 
-    graph_dataset = generate_graph_dataset(
+    graph_dataset, graph_edge_attr = generate_graph_dataset(
         dataset,
         args.comm_radius,
         args.obs_radius,
         args.num_samples,
         args.save_termination_state,
+        args.use_edge_attr,
     )
 
+    file_name = get_imitation_dataset_file_name(args)
     path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
-        pickle.dump(graph_dataset, f)
+        if args.use_edge_attr:
+            pickle.dump((graph_dataset, graph_edge_attr), f)    
+        else:
+            pickle.dump(graph_dataset, f)
 
 
 if __name__ == "__main__":

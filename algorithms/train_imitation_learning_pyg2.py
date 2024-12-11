@@ -25,13 +25,12 @@ from graphs.weights_initializer import weights_init
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv, GATv2Conv, HypergraphConv
 
-from convert_to_imitation_dataset import generate_graph_dataset
-from generate_hypergraphs import generate_hypergraph_indices, get_hypergraph_file_name
-from run_expert import (
-    DATASET_FILE_NAME_KEYS,
-    run_expert_algorithm,
-    add_expert_dataset_args,
+from convert_to_imitation_dataset import (
+    generate_graph_dataset,
+    get_imitation_dataset_file_name,
 )
+from generate_hypergraphs import generate_hypergraph_indices, get_hypergraph_file_name
+from run_expert import run_expert_algorithm, add_expert_dataset_args
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2
 from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
@@ -52,6 +51,9 @@ class GNNWrapper(torch.nn.Module):
         self.use_edge_weights = use_edge_weights
         self.use_edge_attr = use_edge_attr
         self.gnn = gnn
+
+    def reset_parameters(self):
+        self.gnn.reset_parameters()
 
     def forward(self, x, data):
         if self.use_edge_weights:
@@ -633,18 +635,18 @@ def main():
     )
 
     dense_dataset = None
+    graph_edge_attr = None
     hyper_edge_indices = None
 
-    file_name = ""
-    dict_args = vars(args)
-    for key in sorted(DATASET_FILE_NAME_KEYS):
-        file_name += f"_{key}_{dict_args[key]}"
-    file_name = file_name[1:] + ".pkl"
+    file_name = get_imitation_dataset_file_name(args)
 
     print("Loading Dataset.....")
     path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
     with open(path, "rb") as f:
-        dense_dataset = pickle.load(f)
+        if args.use_edge_attr:
+            dense_dataset, graph_edge_attr = pickle.load(f)
+        else:
+            dense_dataset = pickle.load(f)
     if hypergraph_model:
         print("Loading Hypergraphs.....")
         file_name = get_hypergraph_file_name(args)
@@ -669,20 +671,21 @@ def main():
 
     def _divide_dataset(start, end):
         mask = torch.logical_and(dense_dataset[-1] >= start, dense_dataset[-1] < end)
+        hindices, edge_attr = None, None
         if hyper_edge_indices is not None:
             hindices = list(compress(hyper_edge_indices, mask))
-        else:
-            hindices = None
-        return tuple(gd[mask] for gd in dense_dataset), hindices
+        if graph_edge_attr is not None:
+            edge_attr = list(compress(graph_edge_attr, mask))
+        return tuple(gd[mask] for gd in dense_dataset), hindices, edge_attr
 
-    train_dataset, train_hindices = _divide_dataset(0, train_id_max)
+    train_dataset, train_hindices, train_edge_attr = _divide_dataset(0, train_id_max)
     # validation_dataset = _divide_dataset(train_id_max, validation_id_max)
     # test_dataset = _divide_dataset(validation_id_max, torch.inf)
 
     if hypergraph_model:
         train_dataset = MAPFHypergraphDataset(train_dataset, train_hindices)
     else:
-        train_dataset = MAPFGraphDataset(train_dataset)
+        train_dataset = MAPFGraphDataset(train_dataset, train_edge_attr)
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
 
     best_validation_success_rate = 0.0
@@ -692,6 +695,7 @@ def main():
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
 
     oe_graph_dataset = None
+    oe_edge_attr = None
     oe_hypergraph_indices = []
 
     def run_model_on_grid(grid_config, max_episodes=None):
@@ -700,13 +704,14 @@ def main():
         move_results = np.array(grid_config.MOVES)
 
         while True:
-            gdata = generate_graph_dataset(
-                [[[observations], [0], [0]]],
-                args.comm_radius,
-                args.obs_radius,
-                None,
-                True,
-                None,
+            gdata, gedge_attr = generate_graph_dataset(
+                dataset=[[[observations], [0], [0]]],
+                comm_radius=args.comm_radius,
+                obs_radius=args.obs_radius,
+                num_samples=None,
+                save_termination_state=True,
+                use_edge_attr=args.use_edge_attr,
+                print_prefix=None,
             )
             if hypergraph_model:
                 hindex = generate_hypergraph_indices(
@@ -718,7 +723,7 @@ def main():
                 )
                 gdata = MAPFHypergraphDataset(gdata, [hindex])[0]
             else:
-                gdata = MAPFGraphDataset(gdata)[0]
+                gdata = MAPFGraphDataset(gdata, gedge_attr)[0]
 
             gdata.to(device)
 
@@ -803,7 +808,8 @@ def main():
                 )
             else:
                 oe_dl = DataLoader(
-                    MAPFGraphDataset(oe_graph_dataset), batch_size=args.batch_size
+                    MAPFGraphDataset(oe_graph_dataset, oe_edge_attr),
+                    batch_size=args.batch_size,
                 )
 
             for data in oe_dl:
@@ -985,16 +991,18 @@ def main():
                 if len(oe_dataset) > 0:
                     print(f"Adding {len(oe_dataset)} OE grids to the dataset")
                     oe_hypergraph_indices.extend(oe_hindices)
-                    new_oe_graph_dataset = generate_graph_dataset(
-                        oe_dataset,
-                        args.comm_radius,
-                        args.obs_radius,
-                        None,
-                        True,
-                        None,
+                    new_oe_graph_dataset, new_oe_edge_attr = generate_graph_dataset(
+                        dataset=oe_dataset,
+                        comm_radius=args.comm_radius,
+                        obs_radius=args.obs_radius,
+                        num_samples=None,
+                        save_termination_state=True,
+                        use_edge_attr=args.use_edge_attr,
+                        print_prefix=None,
                     )
                     if oe_graph_dataset is None:
                         oe_graph_dataset = new_oe_graph_dataset
+                        oe_edge_attr = new_oe_edge_attr
                     else:
                         oe_graph_dataset = tuple(
                             torch.concat(
@@ -1002,6 +1010,8 @@ def main():
                             )
                             for i in range(len(oe_graph_dataset))
                         )
+                        if args.use_edge_attr:
+                            oe_edge_attr.extend(new_oe_edge_attr)
                 print("Finished Online Expert")
                 print("----------------------")
 

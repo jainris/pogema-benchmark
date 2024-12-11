@@ -31,7 +31,7 @@ def convert_dense_graph_dataset_to_sparse_pyg_dataset(dense_dataset):
 
 
 class MAPFGraphDataset(Dataset):
-    def __init__(self, dense_dataset) -> None:
+    def __init__(self, dense_dataset, dataset_edge_attr) -> None:
         (
             self.dataset_node_features,
             self.dataset_Adj,
@@ -39,16 +39,23 @@ class MAPFGraphDataset(Dataset):
             self.dataset_terminated,
             self.graph_map_id,
         ) = dense_dataset
+        self.dataset_edge_attr = dataset_edge_attr
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
 
     def __getitem__(self, index):
         edge_index, edge_weight = dense_to_sparse(self.dataset_Adj[index])
+        edge_attr = None
+        if self.dataset_edge_attr is not None:
+            edge_attr = torch.tensor(
+                self.dataset_edge_attr[index], dtype=self.dataset_node_features.dtype
+            )
         return Data(
             x=self.dataset_node_features[index],
             edge_index=edge_index,
             edge_weight=edge_weight,
+            edge_attr=edge_attr,
             y=self.dataset_target_actions[index],
             terminated=self.dataset_terminated[index],
         )
