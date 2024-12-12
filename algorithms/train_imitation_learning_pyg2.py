@@ -30,6 +30,7 @@ from convert_to_imitation_dataset import (
     get_imitation_dataset_file_name,
 )
 from generate_hypergraphs import generate_hypergraph_indices, get_hypergraph_file_name
+from generate_pos import get_pos_file_name
 from run_expert import run_expert_algorithm, add_expert_dataset_args
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2
@@ -473,6 +474,9 @@ def main():
     parser.add_argument(
         "--use_edge_attr", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--load_positions_separately", action=argparse.BooleanOptionalAction, default=False
+    )
     parser.add_argument("--edge_dim", type=int, default=None)
 
     args = parser.parse_args()
@@ -639,12 +643,19 @@ def main():
 
     file_name = get_imitation_dataset_file_name(args)
 
-    print("Loading Dataset.....")
+    print("Loading Dataset.............")
     path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
     with open(path, "rb") as f:
         dense_dataset = pickle.load(f)
+    if args.load_positions_separately:
+        print("Loading Agent Positions.....")
+        file_name = get_pos_file_name(args)
+        path = pathlib.Path(args.dataset_dir, "positions", file_name)
+        with open(path, "rb") as f:
+            agent_pos = pickle.load(f)
+        dense_dataset = (*dense_dataset, agent_pos)
     if hypergraph_model:
-        print("Loading Hypergraphs.....")
+        print("Loading Hypergraphs.........")
         file_name = get_hypergraph_file_name(args)
         path = pathlib.Path(args.dataset_dir, "hypergraphs", file_name)
         with open(path, "rb") as f:

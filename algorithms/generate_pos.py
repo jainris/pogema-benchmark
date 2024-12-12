@@ -9,7 +9,7 @@ from scipy.spatial.distance import squareform, pdist
 from run_expert import DATASET_FILE_NAME_KEYS, add_expert_dataset_args
 
 
-def get_imitation_dataset_file_name(args):
+def get_pos_file_name(args):
     file_name = ""
     dict_args = vars(args)
     for key in sorted(DATASET_FILE_NAME_KEYS):
@@ -82,7 +82,7 @@ def main():
         args.use_edge_attr,
     )
 
-    file_name = get_imitation_dataset_file_name(args)
+    file_name = get_pos_file_name(args)
     path = pathlib.Path(f"{args.dataset_dir}", "positions", f"{file_name}")
 
     path.parent.mkdir(parents=True, exist_ok=True)

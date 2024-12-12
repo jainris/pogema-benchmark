@@ -14,7 +14,10 @@ def get_imitation_dataset_file_name(args):
     dict_args = vars(args)
     for key in sorted(DATASET_FILE_NAME_KEYS):
         file_name += f"_{key}_{dict_args[key]}"
-    if args.use_edge_attr:
+    if "load_positions_separately" in dict_args:
+        if (not dict_args["load_positions_separately"]) and args.use_edge_attr:
+            file_name += "_pos"
+    elif args.use_edge_attr:
         file_name += "_pos"
     file_name = file_name[1:] + ".pkl"
     return file_name
