@@ -8,7 +8,7 @@ from pogema import pogema_v0, GridConfig
 
 from lacam.inference import LacamInference, LacamInferenceConfig
 
-DATASET_FILE_NAME_KEYS = [
+EXPERT_FILE_NAME_KEYS = [
     "expert_algorithm",
     "map_type",
     "map_h",
@@ -22,7 +22,18 @@ DATASET_FILE_NAME_KEYS = [
     "save_termination_state",
     "collision_system",
     "on_target",
+    "skip_n",
+    "subsample_n",
 ]
+
+
+def get_expert_file_name(dict_args):
+    file_name = ""
+    for key in sorted(EXPERT_FILE_NAME_KEYS):
+        if dict_args[key] is not None:
+            file_name += f"_{key}_{dict_args[key]}"
+    file_name = file_name[1:] + ".pkl"
+    return file_name
 
 
 def add_expert_dataset_args(parser):
@@ -34,7 +45,7 @@ def add_expert_dataset_args(parser):
     parser.add_argument("--robot_density", type=float, default=0.025)
     parser.add_argument("--obstacle_density", type=float, default=0.1)
     parser.add_argument("--max_episode_steps", type=int, default=128)
-    parser.add_argument("--obs_radius", type=int, default=3)
+    parser.add_argument("--obs_radius", type=int, default=4)
     parser.add_argument("--collision_system", type=str, default="soft")
     parser.add_argument("--on_target", type=str, default="nothing")
 
@@ -54,15 +65,25 @@ def run_expert_algorithm(expert, env=None, observations=None, grid_config=None):
         env = pogema_v0(grid_config=grid_config)
         observations, infos = env.reset()
 
+    makespan = 0
+    flowtime = np.zeros(env.get_num_agents())
+
     while True:
         actions = expert.act(observations)
 
+        original_pos = np.array([obs["global_xy"] for obs in observations])
+
         observations, rewards, terminated, truncated, infos = env.step(actions)
+
+        new_pos = np.array([obs["global_xy"] for obs in observations])
+
+        makespan += 1
+        flowtime += np.all(original_pos != new_pos, axis=-1)
 
         if all(terminated) or all(truncated):
             break
 
-    return all(terminated)
+    return all(terminated), makespan, np.sum(flowtime)
 
 
 def main():
@@ -70,6 +91,8 @@ def main():
     parser = add_expert_dataset_args(parser)
 
     parser.add_argument("--test_name", type=str, default="in_distribution")
+    parser.add_argument("--skip_n", type=int, default=None)
+    parser.add_argument("--subsample_n", type=int, default=None)
 
     args = parser.parse_args()
     print(args)
@@ -84,6 +107,10 @@ def main():
 
         rng = np.random.default_rng(args.dataset_seed)
         seeds = rng.integers(10**10, size=args.num_samples)
+        if args.skip_n is not None:
+            seeds = seeds[args.skip_n :]
+        if args.subsample_n is not None:
+            seeds = seeds[: args.subsample_n]
 
         grid_configs = []
 
@@ -120,14 +147,19 @@ def main():
     )
 
     num_success = 0
+    all_success, all_makespan, all_total_flowtime = [], [], []
+    num_samples = len(grid_configs)
     for i, grid_config in enumerate(grid_configs):
-        print(f"Running expert on map {i + 1}/{args.num_samples}", end=" ")
+        print(f"Running expert on map {i + 1}/{num_samples}", end=" ")
         expert = expert_algorithm(inference_config)
 
-        success = run_expert_algorithm(
+        success, makespan, total_flowtime = run_expert_algorithm(
             expert,
             grid_config=grid_config,
         )
+        all_success.append(success)
+        all_makespan.append(makespan)
+        all_total_flowtime.append(total_flowtime)
 
         if success:
             num_success += 1
@@ -135,7 +167,20 @@ def main():
         success_rate = num_success / (i + 1)
 
         print(f"-- Success Rate: {success_rate}")
-        wandb.log({"success_rate": success_rate})
+        wandb.log(
+            {
+                "success_rate": success_rate,
+                "average_makespan": np.mean(all_makespan),
+                "average_total_flowtime": np.mean(all_total_flowtime),
+            }
+        )
+
+    file_name = get_expert_file_name(vars(args))
+    path = pathlib.Path(f"{args.dataset_dir}", "test_expert_metrics", f"{file_name}")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump((all_success, all_makespan, all_total_flowtime), f)
 
 
 if __name__ == "__main__":

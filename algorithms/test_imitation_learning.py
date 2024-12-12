@@ -31,6 +31,7 @@ from run_expert import (
 )
 from train_imitation_learning import add_training_args
 from train_imitation_learning import DecentralPlannerGATNet, run_model_on_grid
+from test_expert import get_expert_file_name, EXPERT_FILE_NAME_KEYS
 
 
 def main():
@@ -63,6 +64,9 @@ def main():
     parser.add_argument("--model_epoch_num", type=int, default=None)
 
     parser.add_argument("--test_name", type=str, default="in_distribution")
+    parser.add_argument(
+        "--test_wrt_expert", action=argparse.BooleanOptionalAction, default=False
+    )
 
     args = parser.parse_args()
     print(args)
@@ -75,6 +79,31 @@ def main():
         device = torch.device(f"cuda:{args.device}")
     else:
         device = torch.device("cpu")
+
+    if args.test_wrt_expert:
+        print("Loading Expert Solutions........")
+        dict_args = vars(args)
+        if args.test_in_distribution:
+            train_id_max = int(
+                args.num_samples * (1 - args.validation_fraction - args.test_fraction)
+            )
+            validation_id_max = train_id_max + int(
+                args.num_samples * args.validation_fraction
+            )
+            if args.get_validation_results:
+                dict_args["skip_n"] = train_id_max
+                dict_args["subsample_n"] = validation_id_max - train_id_max
+            else:
+                dict_args["skip_n"] = validation_id_max
+                dict_args["subsample_n"] = None
+        else:
+            for key in EXPERT_FILE_NAME_KEYS:
+                if key in dict_args:
+                    dict_args[key] = dict_args[f"test_{key}"]
+            dict_args["skip_n"] = None
+            dict_args["subsample_n"] = None
+        file_name = get_expert_file_name(dict_args)
+        # TODO: Code for getting expert data
 
     if args.test_in_distribution:
         num_agents = int(args.robot_density * args.map_h * args.map_w)
@@ -102,6 +131,7 @@ def main():
                 seeds = seeds[validation_id_max:]
 
             grid_configs = []
+            # TODO
             for seed in seeds:
                 grid_config = GridConfig(
                     num_agents=num_agents,  # number of agents
@@ -177,20 +207,23 @@ def main():
     )
 
     if args.model_epoch_num is None:
-        checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
+        checkpoint_path = pathlib.Path(args.checkpoints_dir, "best.pt")
     else:
         checkpoint_path = pathlib.Path(
-            f"{args.checkpoints_dir}", f"epoch_{args.model_epoch_num}.pt"
+            args.checkpoints_dir, f"epoch_{args.model_epoch_num}.pt"
         )
 
     model.load_state_dict(torch.load(checkpoint_path, map_location=device))
-
     model = model.eval()
+
+    # TODO
+    def aux_func():
+        pass
 
     num_completed = 0
     for i, grid_config in enumerate(grid_configs):
-        success, env, observations = run_model_on_grid(
-            model, comm_radius, obs_radius, grid_config, device
+        success, _, _ = run_model_on_grid(
+            model, comm_radius, obs_radius, grid_config, device, aux_func=aux_func
         )
 
         if success:

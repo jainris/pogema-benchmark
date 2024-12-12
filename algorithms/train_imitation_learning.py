@@ -422,10 +422,19 @@ class DecentralPlannerGATNet(torch.nn.Module):
 
 
 def run_model_on_grid(
-    model, comm_radius, obs_radius, grid_config, device, max_episodes=None
+    model,
+    comm_radius,
+    obs_radius,
+    grid_config,
+    device,
+    max_episodes=None,
+    aux_func=None,
 ):
     env = pogema_v0(grid_config=grid_config)
     observations, infos = env.reset()
+
+    if aux_func is not None:
+        aux_func(env=env, observations=observations, actions=None)
 
     if max_episodes is None:
         while True:
@@ -443,6 +452,9 @@ def run_model_on_grid(
             actions = torch.argmax(actions, dim=-1).detach().cpu()
 
             observations, rewards, terminated, truncated, infos = env.step(actions)
+
+            if aux_func is not None:
+                aux_func(env=env, observations=observations, actions=actions)
 
             if all(terminated) or all(truncated):
                 break
@@ -462,6 +474,9 @@ def run_model_on_grid(
             actions = torch.argmax(actions, dim=-1).detach().cpu()
 
             observations, rewards, terminated, truncated, infos = env.step(actions)
+
+            if aux_func is not None:
+                aux_func(env=env, observations=observations, actions=actions)
 
             if all(terminated) or all(truncated):
                 break
@@ -588,7 +603,8 @@ def main():
     ) = train_dataset
 
     best_validation_success_rate = 0.0
-    checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
+    best_val_file_name = "best_low_val.pt"
+    checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", best_val_file_name)
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
@@ -754,7 +770,8 @@ def main():
                     print("Success rate passed threshold -- Increasing Validation Size")
                     args.threshold_val_success_rate = 1.1
                     cur_validation_id_max = validation_id_max
-                checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
+                    best_val_file_name = "best.pt"
+                checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", best_val_file_name)
                 torch.save(model.state_dict(), checkpoint_path)
 
             print("Finshed Validation")

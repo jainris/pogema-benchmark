@@ -677,7 +677,7 @@ def main():
     validation_id_max = train_id_max + int(args.num_samples * args.validation_fraction)
 
     def _divide_dataset(start, end):
-        mask = torch.logical_and(dense_dataset[-1] >= start, dense_dataset[-1] < end)
+        mask = torch.logical_and(dense_dataset[4] >= start, dense_dataset[4] < end)
         hindices = None
         if hyper_edge_indices is not None:
             hindices = list(compress(hyper_edge_indices, mask))
@@ -694,7 +694,8 @@ def main():
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
 
     best_validation_success_rate = 0.0
-    checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
+    best_val_file_name = "best_low_val.pt"
+    checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", best_val_file_name)
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
@@ -883,7 +884,8 @@ def main():
                     print("Success rate passed threshold -- Increasing Validation Size")
                     args.threshold_val_success_rate = 1.1
                     cur_validation_id_max = validation_id_max
-                checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", "best.pt")
+                    best_val_file_name = "best.pt"
+                checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", best_val_file_name)
                 torch.save(model.state_dict(), checkpoint_path)
 
             print("Finshed Validation")
