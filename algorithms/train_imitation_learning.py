@@ -771,7 +771,9 @@ def main():
                     args.threshold_val_success_rate = 1.1
                     cur_validation_id_max = validation_id_max
                     best_val_file_name = "best.pt"
-                checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", best_val_file_name)
+                checkpoint_path = pathlib.Path(
+                    f"{args.checkpoints_dir}", best_val_file_name
+                )
                 torch.save(model.state_dict(), checkpoint_path)
 
             print("Finshed Validation")

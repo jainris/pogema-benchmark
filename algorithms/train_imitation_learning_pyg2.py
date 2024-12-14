@@ -38,6 +38,72 @@ from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
 from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2, HMAGAT3
 
 
+def add_training_args(parser):
+    parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
+
+    parser.add_argument("--comm_radius", type=int, default=7)
+
+    parser.add_argument("--validation_fraction", type=float, default=0.15)
+    parser.add_argument("--test_fraction", type=float, default=0.15)
+    parser.add_argument("--num_training_oe", type=int, default=500)
+    parser.add_argument("--batch_size", type=int, default=64)
+
+    parser.add_argument("--embedding_size", type=int, default=128)
+    parser.add_argument("--num_gnn_layers", type=int, default=3)
+    parser.add_argument("--num_attention_heads", type=int, default=1)
+
+    parser.add_argument("--lr_start", type=float, default=1e-3)
+    parser.add_argument("--lr_end", type=float, default=1e-6)
+    parser.add_argument("--num_epochs", type=int, default=300)
+
+    parser.add_argument("--validation_every_epochs", type=int, default=4)
+    parser.add_argument(
+        "--run_online_expert", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--save_intmd_checkpoints", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
+
+    parser.add_argument(
+        "--skip_validation", action=argparse.BooleanOptionalAction, default=False
+    )
+
+    parser.add_argument("--run_name", type=str, default=None)
+    parser.add_argument("--device", type=int, default=None)
+    parser.add_argument("--model_seed", type=int, default=42)
+    parser.add_argument("--initial_val_size", type=int, default=128)
+    parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
+    parser.add_argument("--num_run_oe", type=int, default=500)
+    parser.add_argument("--run_oe_after", type=int, default=0)
+    parser.add_argument("--attention_mode", type=str, default="GAT_modified")
+
+    parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
+    parser.add_argument("--hypergraph_num_steps", type=int, default=3)
+
+    parser.add_argument("--hyperedge_feature_generator", type=str, default="gcn")
+    parser.add_argument(
+        "--generate_graph_from_hyperedges",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+
+    parser.add_argument(
+        "--use_edge_weights", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--use_edge_attr", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--load_positions_separately",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument("--edge_dim", type=int, default=None)
+
+    return parser
+
+
 class GNNWrapper(torch.nn.Module):
     def __init__(
         self,
@@ -416,118 +482,65 @@ class DecentralPlannerGATNet(torch.nn.Module):
         return x
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Train imitation learning model.")
-    parser = add_expert_dataset_args(parser)
-    parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
+def run_model_on_grid(
+    model,
+    device,
+    grid_config,
+    args,
+    hypergraph_model,
+    max_episodes=None,
+    aux_func=None,
+):
+    env = pogema_v0(grid_config=grid_config)
+    observations, infos = env.reset()
+    move_results = np.array(grid_config.MOVES)
 
-    parser.add_argument("--comm_radius", type=int, default=7)
+    if aux_func is not None:
+        aux_func(env=env, observations=observations, actions=None)
 
-    parser.add_argument("--validation_fraction", type=float, default=0.15)
-    parser.add_argument("--test_fraction", type=float, default=0.15)
-    parser.add_argument("--num_training_oe", type=int, default=500)
-    parser.add_argument("--batch_size", type=int, default=64)
-
-    parser.add_argument("--embedding_size", type=int, default=128)
-    parser.add_argument("--num_gnn_layers", type=int, default=3)
-    parser.add_argument("--num_attention_heads", type=int, default=1)
-
-    parser.add_argument("--lr_start", type=float, default=1e-3)
-    parser.add_argument("--lr_end", type=float, default=1e-6)
-    parser.add_argument("--num_epochs", type=int, default=300)
-
-    parser.add_argument("--validation_every_epochs", type=int, default=4)
-    parser.add_argument(
-        "--run_online_expert", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument(
-        "--save_intmd_checkpoints", action=argparse.BooleanOptionalAction, default=True
-    )
-    parser.add_argument("--checkpoints_dir", type=str, default="checkpoints")
-
-    parser.add_argument(
-        "--skip_validation", action=argparse.BooleanOptionalAction, default=False
-    )
-
-    parser.add_argument("--run_name", type=str, default=None)
-    parser.add_argument("--device", type=int, default=None)
-    parser.add_argument("--model_seed", type=int, default=42)
-    parser.add_argument("--initial_val_size", type=int, default=128)
-    parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
-    parser.add_argument("--num_run_oe", type=int, default=500)
-    parser.add_argument("--run_oe_after", type=int, default=0)
-    parser.add_argument("--attention_mode", type=str, default="GAT_modified")
-
-    parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
-    parser.add_argument("--hypergraph_num_steps", type=int, default=3)
-
-    parser.add_argument("--hyperedge_feature_generator", type=str, default="gcn")
-    parser.add_argument(
-        "--generate_graph_from_hyperedges",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-    )
-
-    parser.add_argument(
-        "--use_edge_weights", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument(
-        "--use_edge_attr", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument(
-        "--load_positions_separately", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument("--edge_dim", type=int, default=None)
-
-    args = parser.parse_args()
-    print(args)
-
-    assert args.save_termination_state
-
-    if args.device == -1:
-        device = torch.device("cuda")
-    elif args.device is not None:
-        device = torch.device(f"cuda:{args.device}")
-    else:
-        device = torch.device("cpu")
-
-    num_agents = int(args.robot_density * args.map_h * args.map_w)
-
-    if args.map_type == "RandomGrid":
-        assert args.map_h == args.map_w, (
-            f"Expect height and width of random grid to be the same, "
-            f"but got height {args.map_h} and width {args.map_w}"
+    while True:
+        gdata = generate_graph_dataset(
+            dataset=[[[observations], [0], [0]]],
+            comm_radius=args.comm_radius,
+            obs_radius=args.obs_radius,
+            num_samples=None,
+            save_termination_state=True,
+            use_edge_attr=args.use_edge_attr,
+            print_prefix=None,
         )
-
-        rng = np.random.default_rng(args.dataset_seed)
-        seeds = rng.integers(10**10, size=args.num_samples)
-
-        def _grid_config_generator(seed):
-            return GridConfig(
-                num_agents=num_agents,  # number of agents
-                size=args.map_w,  # size of the grid
-                density=args.obstacle_density,  # obstacle density
-                seed=seed,  # set to None for random
-                # obstacles, agents and targets
-                # positions at each reset
-                max_episode_steps=args.max_episode_steps,  # horizon
-                obs_radius=args.obs_radius,  # defines field of view
-                observation_type="MAPF",
-                collision_system=args.collision_system,
-                on_target=args.on_target,
+        if hypergraph_model:
+            hindex = generate_hypergraph_indices(
+                env,
+                args.hypergraph_greedy_distance,
+                args.hypergraph_num_steps,
+                move_results,
+                args.generate_graph_from_hyperedges,
             )
+            gdata = MAPFHypergraphDataset(gdata, [hindex])[0]
+        else:
+            gdata = MAPFGraphDataset(gdata, args.use_edge_attr)[0]
 
-        grid_config = _grid_config_generator(seeds[0])
-    else:
-        raise ValueError(f"Unsupported map type: {args.map_type}.")
+        gdata.to(device)
 
-    if args.expert_algorithm == "LaCAM":
-        inference_config = LacamInferenceConfig()
-        expert_algorithm = LacamInference
-    else:
-        raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
+        actions = model(gdata.x, gdata)
+        actions = torch.argmax(actions, dim=-1).detach().cpu()
 
-    torch.manual_seed(args.model_seed)
+        observations, rewards, terminated, truncated, infos = env.step(actions)
+
+        if aux_func is not None:
+            aux_func(env=env, observations=observations, actions=actions)
+
+        if all(terminated) or all(truncated):
+            break
+
+        if max_episodes is not None:
+            max_episodes -= 1
+            if max_episodes <= 0:
+                break
+    return all(terminated), env, observations
+
+
+def get_model(args, device):
     hypergraph_model = args.generate_graph_from_hyperedges
     if args.imitation_learning_model == "MAGAT":
         gnn_kwargs = {"attentionMode": args.attention_mode}
@@ -632,6 +645,64 @@ def main():
         raise ValueError(
             f"Unsupported imitation learning model {args.imitation_learning_model}."
         )
+    return model, hypergraph_model
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train imitation learning model.")
+    parser = add_expert_dataset_args(parser)
+    parser = add_training_args(parser)
+
+    args = parser.parse_args()
+    print(args)
+
+    assert args.save_termination_state
+
+    if args.device == -1:
+        device = torch.device("cuda")
+    elif args.device is not None:
+        device = torch.device(f"cuda:{args.device}")
+    else:
+        device = torch.device("cpu")
+
+    num_agents = int(args.robot_density * args.map_h * args.map_w)
+
+    if args.map_type == "RandomGrid":
+        assert args.map_h == args.map_w, (
+            f"Expect height and width of random grid to be the same, "
+            f"but got height {args.map_h} and width {args.map_w}"
+        )
+
+        rng = np.random.default_rng(args.dataset_seed)
+        seeds = rng.integers(10**10, size=args.num_samples)
+
+        def _grid_config_generator(seed):
+            return GridConfig(
+                num_agents=num_agents,  # number of agents
+                size=args.map_w,  # size of the grid
+                density=args.obstacle_density,  # obstacle density
+                seed=seed,  # set to None for random
+                # obstacles, agents and targets
+                # positions at each reset
+                max_episode_steps=args.max_episode_steps,  # horizon
+                obs_radius=args.obs_radius,  # defines field of view
+                observation_type="MAPF",
+                collision_system=args.collision_system,
+                on_target=args.on_target,
+            )
+
+        grid_config = _grid_config_generator(seeds[0])
+    else:
+        raise ValueError(f"Unsupported map type: {args.map_type}.")
+
+    if args.expert_algorithm == "LaCAM":
+        inference_config = LacamInferenceConfig()
+        expert_algorithm = LacamInference
+    else:
+        raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
+
+    torch.manual_seed(args.model_seed)
+    model, hypergraph_model = get_model(args, device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr_start, weight_decay=1e-5)
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -702,49 +773,6 @@ def main():
 
     oe_graph_dataset = None
     oe_hypergraph_indices = []
-
-    def run_model_on_grid(grid_config, max_episodes=None):
-        env = pogema_v0(grid_config=grid_config)
-        observations, infos = env.reset()
-        move_results = np.array(grid_config.MOVES)
-
-        while True:
-            gdata = generate_graph_dataset(
-                dataset=[[[observations], [0], [0]]],
-                comm_radius=args.comm_radius,
-                obs_radius=args.obs_radius,
-                num_samples=None,
-                save_termination_state=True,
-                use_edge_attr=args.use_edge_attr,
-                print_prefix=None,
-            )
-            if hypergraph_model:
-                hindex = generate_hypergraph_indices(
-                    env,
-                    args.hypergraph_greedy_distance,
-                    args.hypergraph_num_steps,
-                    move_results,
-                    args.generate_graph_from_hyperedges,
-                )
-                gdata = MAPFHypergraphDataset(gdata, [hindex])[0]
-            else:
-                gdata = MAPFGraphDataset(gdata, args.use_edge_attr)[0]
-
-            gdata.to(device)
-
-            actions = model(gdata.x, gdata)
-            actions = torch.argmax(actions, dim=-1).detach().cpu()
-
-            observations, rewards, terminated, truncated, infos = env.step(actions)
-
-            if all(terminated) or all(truncated):
-                break
-
-            if max_episodes is not None:
-                max_episodes -= 1
-                if max_episodes <= 0:
-                    break
-        return all(terminated), env, observations
 
     def multiprocess_run_expert(
         queue,
@@ -861,7 +889,11 @@ def main():
 
             for graph_id in range(train_id_max, cur_validation_id_max):
                 success, env, observations = run_model_on_grid(
-                    _grid_config_generator(seeds[graph_id])
+                    model,
+                    device,
+                    _grid_config_generator(seeds[graph_id]),
+                    args,
+                    hypergraph_model,
                 )
 
                 if success:
@@ -885,7 +917,9 @@ def main():
                     args.threshold_val_success_rate = 1.1
                     cur_validation_id_max = validation_id_max
                     best_val_file_name = "best.pt"
-                checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", best_val_file_name)
+                checkpoint_path = pathlib.Path(
+                    f"{args.checkpoints_dir}", best_val_file_name
+                )
                 torch.save(model.state_dict(), checkpoint_path)
 
             print("Finshed Validation")
@@ -917,7 +951,12 @@ def main():
                         on_target=args.on_target,
                     )
                     success, env, observations = run_model_on_grid(
-                        grid_config, args.max_episode_steps
+                        model,
+                        device,
+                        grid_config,
+                        args,
+                        hypergraph_model,
+                        args.max_episode_steps,
                     )
 
                     if not success:

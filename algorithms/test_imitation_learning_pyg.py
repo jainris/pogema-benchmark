@@ -5,32 +5,20 @@ import numpy as np
 import sys
 import wandb
 
-from multiprocessing import Process, Queue
 
-from pogema import pogema_v0, GridConfig
-
-from lacam.inference import LacamInference, LacamInferenceConfig
+from pogema import GridConfig
 
 sys.path.append("./magat_pathplanning")
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from graphs.weights_initializer import weights_init
-import utils.graphUtils.graphML as gml
-import utils.graphUtils.graphTools
-from torchsummaryX import summary
-from graphs.models.resnet_pytorch import *
 
-from convert_to_imitation_dataset import generate_graph_dataset
-from run_expert import (
-    DATASET_FILE_NAME_KEYS,
-    run_expert_algorithm,
-    add_expert_dataset_args,
+from run_expert import add_expert_dataset_args
+
+from train_imitation_learning_pyg2 import (
+    run_model_on_grid,
+    add_training_args,
+    get_model,
 )
-from train_imitation_learning import add_training_args
-from train_imitation_learning import DecentralPlannerGATNet, run_model_on_grid
 from test_expert import get_expert_file_name, EXPERT_FILE_NAME_KEYS
 
 
@@ -221,21 +209,7 @@ def main():
         else:
             raise ValueError(f"Unsupported map type: {args.test_map_type}.")
 
-    if args.imitation_learning_model == "MAGAT":
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            nGraphFilterTaps=args.num_gnn_layers,
-            nAttentionHeads=args.num_attention_heads,
-            use_dropout=True,
-            CNN_mode=None,
-            attentionMode="GAT_modified",
-            AttentionConcat=True,
-        ).to(device)
-    else:
-        raise ValueError(
-            f"Unsupported imitation learning model {args.imitation_learning_model}."
-        )
+    model, hypergraph_model = get_model(args, device)
 
     run_name = f"{args.test_name}_{args.run_name}"
     wandb.init(
@@ -281,7 +255,7 @@ def main():
         else:
             grid_config = _grid_config_generator(seed)
         success, _, _ = run_model_on_grid(
-            model, comm_radius, obs_radius, grid_config, device, aux_func=aux_func
+            model, device, grid_config, args, hypergraph_model, aux_func=aux_func
         )
         makespan = aux_func.makespan
         flowtime = aux_func.flowtime

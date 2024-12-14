@@ -172,6 +172,10 @@ def main():
                 "success_rate": success_rate,
                 "average_makespan": np.mean(all_makespan),
                 "average_total_flowtime": np.mean(all_total_flowtime),
+                "seed": grid_config.seed,
+                "success": success,
+                "makespan": makespan,
+                "total_flowtime": total_flowtime,
             }
         )
 
