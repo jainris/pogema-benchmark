@@ -68,6 +68,11 @@ def add_training_args(parser):
     parser.add_argument(
         "--skip_validation", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--skip_validation_accuracy",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
 
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--device", type=int, default=None)
@@ -540,7 +545,7 @@ def run_model_on_grid(
     return all(terminated), env, observations
 
 
-def get_model(args, device):
+def get_model(args, device) -> tuple[torch.nn.Module, bool]:
     hypergraph_model = args.generate_graph_from_hyperedges
     if args.imitation_learning_model == "MAGAT":
         gnn_kwargs = {"attentionMode": args.attention_mode}
@@ -755,17 +760,26 @@ def main():
         return tuple(gd[mask] for gd in dense_dataset), hindices
 
     train_dataset, train_hindices = _divide_dataset(0, train_id_max)
-    # validation_dataset = _divide_dataset(train_id_max, validation_id_max)
+    validation_dataset, validation_hindices = _divide_dataset(
+        train_id_max, validation_id_max
+    )
     # test_dataset = _divide_dataset(validation_id_max, torch.inf)
 
     if hypergraph_model:
         train_dataset = MAPFHypergraphDataset(train_dataset, train_hindices)
+        validation_dataset = MAPFHypergraphDataset(
+            validation_dataset, validation_hindices
+        )
     else:
         train_dataset = MAPFGraphDataset(train_dataset, args.use_edge_attr)
+        validation_dataset = MAPFGraphDataset(validation_dataset, args.use_edge_attr)
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
+    validation_dl = DataLoader(validation_dataset, batch_size=args.batch_size)
 
     best_validation_success_rate = 0.0
+    best_validation_accuracy = 0.0
     best_val_file_name = "best_low_val.pt"
+    best_val_acc_file_name = "best_acc_val.pt"
     checkpoint_path = pathlib.Path(f"{args.checkpoints_dir}", best_val_file_name)
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -887,6 +901,31 @@ def main():
             print("-------------------")
             print("Starting Validation")
 
+            if not args.skip_validation_accuracy:
+                val_correct = 0
+                val_samples = 0
+
+                for data in validation_dl:
+                    data = data.to(device)
+                    out = model(data.x, data)
+
+                    out = out[~data.terminated]
+                    target_actions = data.y[~data.terminated]
+                    val_correct += (
+                        torch.sum(torch.argmax(out, dim=-1) == target_actions)
+                        .detach()
+                        .cpu()
+                    )
+                    val_samples += out.shape[0]
+                val_accuracy = val_correct / val_samples
+                results = results | {"validation_accuracy": val_accuracy}
+                if val_accuracy > best_validation_accuracy:
+                    best_validation_accuracy = val_accuracy
+                    checkpoint_path = pathlib.Path(
+                        args.checkpoints_dir, best_val_acc_file_name
+                    )
+                    torch.save(model.state_dict(), checkpoint_path)
+
             for graph_id in range(train_id_max, cur_validation_id_max):
                 success, env, observations = run_model_on_grid(
                     model,
@@ -912,6 +951,7 @@ def main():
                 torch.save(model.state_dict(), checkpoint_path)
 
             if success_rate > best_validation_success_rate:
+                best_validation_success_rate = success_rate
                 if success_rate >= args.threshold_val_success_rate:
                     print("Success rate passed threshold -- Increasing Validation Size")
                     args.threshold_val_success_rate = 1.1
