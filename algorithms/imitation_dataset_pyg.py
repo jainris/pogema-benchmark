@@ -35,6 +35,7 @@ def decode_dense_dataset(dense_dataset, use_edge_attr):
         return dense_dataset
     return *dense_dataset, None
 
+
 class MAPFGraphDataset(Dataset):
     def __init__(self, dense_dataset, use_edge_attr) -> None:
         (
@@ -43,7 +44,7 @@ class MAPFGraphDataset(Dataset):
             self.dataset_target_actions,
             self.dataset_terminated,
             self.graph_map_id,
-            self.dataset_agent_pos
+            self.dataset_agent_pos,
         ) = decode_dense_dataset(dense_dataset, use_edge_attr)
         self.use_edge_attr = use_edge_attr
 
@@ -68,7 +69,11 @@ class MAPFGraphDataset(Dataset):
 
 class MAPFHypergraphDataset(Dataset):
     def __init__(
-        self, dense_dataset, hyperedge_indices, store_graph_indices=False
+        self,
+        dense_dataset,
+        hyperedge_indices,
+        store_graph_indices=False,
+        use_edge_attr=False,
     ) -> None:
         (
             self.dataset_node_features,
@@ -76,14 +81,18 @@ class MAPFHypergraphDataset(Dataset):
             self.dataset_target_actions,
             self.dataset_terminated,
             self.graph_map_id,
-        ) = dense_dataset
+            self.dataset_agent_pos,
+        ) = decode_dense_dataset(dense_dataset, use_edge_attr)
         self.hyperedge_indices = hyperedge_indices
         self.store_graph_indices = store_graph_indices
+        self.use_edge_attr = use_edge_attr
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
 
     def __getitem__(self, index):
+        if self.use_edge_attr:
+            raise NotImplementedError("Yet to implement")
         if self.store_graph_indices:
             graph_edge_index, graph_edge_weight = dense_to_sparse(
                 self.dataset_Adj[index]

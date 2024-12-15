@@ -76,9 +76,6 @@ def greedy_step(target_pos, agent_pos, obstacles, move_results):
     return actions, new_agent_pos
 
 
-from scipy.spatial.distance import squareform, pdist
-
-
 def update_groups(agent_pos, groups, hypergraph_greedy_distance):
     if len(groups.keys()) > 0:
         max_groups = max(groups.keys()) + 1
