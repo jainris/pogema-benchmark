@@ -263,7 +263,7 @@ def main():
         else:
             new_pos = np.array([obs["global_xy"] for obs in observations])
             aux_func.makespan += 1
-            aux_func.flowtime += np.all(aux_func.original_pos != new_pos, axis=-1)
+            aux_func.flowtime += np.any(aux_func.original_pos != new_pos, axis=-1)
             aux_func.original_pos = new_pos
 
     num_completed = 0

@@ -78,7 +78,7 @@ def run_expert_algorithm(expert, env=None, observations=None, grid_config=None):
         new_pos = np.array([obs["global_xy"] for obs in observations])
 
         makespan += 1
-        flowtime += np.all(original_pos != new_pos, axis=-1)
+        flowtime += np.any(original_pos != new_pos, axis=-1)
 
         if all(terminated) or all(truncated):
             break
