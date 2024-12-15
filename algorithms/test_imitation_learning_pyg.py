@@ -4,6 +4,7 @@ import pathlib
 import numpy as np
 import sys
 import wandb
+from collections import OrderedDict
 
 
 from pogema import GridConfig
@@ -20,6 +21,18 @@ from train_imitation_learning_pyg2 import (
     get_model,
 )
 from test_expert import get_expert_file_name, EXPERT_FILE_NAME_KEYS
+
+
+def load_from_legacy_state_dict(state_dict):
+    new_state_dict = OrderedDict()
+    for key in state_dict.keys():
+        if key.split(".")[0] == "gnns":
+            k2 = key.split(".")
+            k2[1] = f"{k2[1]}.gnn"
+            new_state_dict[".".join(k2)] = state_dict[key]
+        else:
+            new_state_dict[key] = state_dict[key]
+    return new_state_dict
 
 
 def main():
@@ -226,7 +239,13 @@ def main():
             args.checkpoints_dir, f"epoch_{args.model_epoch_num}.pt"
         )
 
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    state_dict = torch.load(checkpoint_path, map_location=device)
+    try:
+        model.load_state_dict(state_dict)
+    except:
+        # Loading from legacy state dict
+        state_dict = load_from_legacy_state_dict(state_dict)
+        model.load_state_dict(state_dict)
     model = model.eval()
 
     def aux_func(env, observations, actions):
