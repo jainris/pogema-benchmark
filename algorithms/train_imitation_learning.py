@@ -439,12 +439,12 @@ def run_model_on_grid(
     if max_episodes is None:
         while True:
             gdata = generate_graph_dataset(
-                [[[observations], [0], [0]]],
-                comm_radius,
-                obs_radius,
-                None,
-                True,
-                None,
+                dataset=[[[observations], [0], [0]]],
+                comm_radius=comm_radius,
+                obs_radius=obs_radius,
+                num_samples=None,
+                save_termination_state=True,
+                print_prefix=None,
             )
 
             model.addGSO(gdata[1].to(device), device)
