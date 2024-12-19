@@ -287,6 +287,8 @@ def main():
         makespan = aux_func.makespan
         flowtime = aux_func.flowtime
 
+        flowtime[~np.array(env.was_on_goal)] = makespan
+
         num_tested += 1
         if success:
             num_completed += 1
