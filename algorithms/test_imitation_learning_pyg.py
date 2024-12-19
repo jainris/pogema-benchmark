@@ -264,6 +264,7 @@ def main():
 
     all_makespan = []
     all_total_flowtime = []
+    all_partial_success_rate = []
 
     for i, seed in enumerate(seeds):
         if args.test_wrt_expert:
@@ -273,7 +274,7 @@ def main():
             grid_config = _grid_config_generator(seed, expert_makespan[i])
         else:
             grid_config = _grid_config_generator(seed)
-        success, _, _ = run_model_on_grid(
+        success, env, _ = run_model_on_grid(
             model, device, grid_config, args, hypergraph_model, aux_func=aux_func
         )
         makespan = aux_func.makespan
@@ -284,18 +285,22 @@ def main():
             num_completed += 1
         success_rate = num_completed / num_tested
         total_flowtime = np.sum(flowtime)
+        partial_success_rate = np.mean(env.was_on_goal)
 
         all_makespan.append(makespan)
         all_total_flowtime.append(total_flowtime)
+        all_partial_success_rate.append(partial_success_rate)
 
         results = {
             "success_rate": success_rate,
             "average_makespan": np.mean(all_makespan),
             "average_total_flowtime": np.mean(all_total_flowtime),
+            "average_partial_success_rate": np.mean(all_partial_success_rate),
             "seed": seed,
             "success": success,
             "makespan": makespan,
             "total_flowtime": total_flowtime,
+            "partial_success_rate": partial_success_rate,
         }
         if args.test_wrt_expert:
             relative_flowtime_increase = (
