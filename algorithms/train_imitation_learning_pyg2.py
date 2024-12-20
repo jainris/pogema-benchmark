@@ -864,10 +864,11 @@ def main():
             optimizer.zero_grad()
 
             out = model(data.x, data)
+            target_actions = data.y
 
             if not args.train_on_terminated_agents:
                 out = out[~data.terminated]
-                target_actions = data.y[~data.terminated]
+                target_actions = target_actions[~data.terminated]
             loss = loss_function(out, target_actions)
 
             total_loss += loss.item()
@@ -898,10 +899,11 @@ def main():
                 optimizer.zero_grad()
 
                 out = model(data.x, data)
+                target_actions = data.y
 
                 if not args.train_on_terminated_agents:
                     out = out[~data.terminated]
-                    target_actions = data.y[~data.terminated]
+                    target_actions = target_actions[~data.terminated]
                 loss = loss_function(out, target_actions)
 
                 total_loss += loss.item()
@@ -943,10 +945,11 @@ def main():
                 for data in validation_dl:
                     data = data.to(device)
                     out = model(data.x, data)
+                    target_actions = data.y
 
                     if not args.train_on_terminated_agents:
                         out = out[~data.terminated]
-                        target_actions = data.y[~data.terminated]
+                        target_actions = target_actions[~data.terminated]
                     val_correct += (
                         torch.sum(torch.argmax(out, dim=-1) == target_actions)
                         .detach()
