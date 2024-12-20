@@ -54,7 +54,7 @@ class MAPFGraphDataset(Dataset):
     def __getitem__(self, index):
         edge_index, edge_weight = dense_to_sparse(self.dataset_Adj[index])
         edge_attr = None
-        if self.use_edge_attr is not None:
+        if self.use_edge_attr:
             agent_pos = self.dataset_agent_pos[index]
             edge_attr = agent_pos[edge_index[0]] - agent_pos[edge_index[1]]
         return Data(
