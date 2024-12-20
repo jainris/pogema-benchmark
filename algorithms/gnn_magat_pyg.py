@@ -1600,6 +1600,7 @@ class BipartiteGCNConv(MessagePassing):
         add_self_loops: Optional[bool] = None,
         normalize: bool = True,
         bias: bool = True,
+        post_relu: bool = False,
         **kwargs,
     ):
         kwargs.setdefault("aggr", "add")
@@ -1625,6 +1626,7 @@ class BipartiteGCNConv(MessagePassing):
         self.cached = cached
         self.add_self_loops = add_self_loops
         self.normalize = normalize
+        self.post_relu = post_relu
 
         self.lin = Linear(
             in_channels, out_channels, bias=False, weight_initializer="glorot"
@@ -1655,6 +1657,9 @@ class BipartiteGCNConv(MessagePassing):
         if self.bias is not None:
             out = out + self.bias
 
+        if self.post_relu:
+            out = F.relu(out)
+
         return out
 
     def message(self, x_j: Tensor, edge_weight: OptTensor) -> Tensor:
@@ -1679,9 +1684,18 @@ class BaseHypergraph(torch.nn.Module):
             self.bipartite_hyperedge_feature_generator = True
             self.hyperedge_feature_generator = BipartiteGCNConv(
                 in_channels=in_channels,
-                out_channels=out_channels,
+                out_channels=in_channels,
                 add_self_loops=False,
                 normalize=False,
+            )
+        elif hyperedge_feature_generator == "bgcn-relu":
+            self.bipartite_hyperedge_feature_generator = True
+            self.hyperedge_feature_generator = BipartiteGCNConv(
+                in_channels=in_channels,
+                out_channels=in_channels,
+                add_self_loops=False,
+                normalize=False,
+                post_relu=True,
             )
         else:
             raise ValueError(
