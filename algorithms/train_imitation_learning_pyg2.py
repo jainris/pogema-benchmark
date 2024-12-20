@@ -106,6 +106,8 @@ def add_training_args(parser):
     )
     parser.add_argument("--edge_dim", type=int, default=None)
 
+    parser.add_argument("--model_residuals", type=str, default=None)
+
     return parser
 
 
@@ -143,6 +145,7 @@ def GNNFactory(
     use_edge_weights=False,
     use_edge_attr=False,
     edge_dim=None,
+    residual=None,
     **model_kwargs,
 ):
     if use_edge_attr:
@@ -157,7 +160,9 @@ def GNNFactory(
         ), f"Not using edge attr or weights, so expect node_dim to be None, but got {edge_dim}"
     kwargs = dict()
     if edge_dim is not None:
-        kwargs = {"edge_dim": edge_dim}
+        kwargs = kwargs | {"edge_dim": edge_dim}
+    if residual is not None:
+        kwargs = kwargs | {"residual": residual}
 
     def _factory():
         if model_type == "MAGAT":
@@ -367,6 +372,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         use_edge_weights=False,
         use_edge_attr=False,
         edge_dim=None,
+        model_residuals=None,
     ):
         super().__init__()
 
@@ -410,6 +416,22 @@ class DecentralPlannerGATNet(torch.nn.Module):
         #                                                                   #
         #####################################################################
 
+        first_residual = None
+        rest_residuals = None
+        if model_residuals == "first":
+            first_residual = True
+        elif model_residuals == "only-first":
+            first_residual = True
+            rest_residuals = False
+        elif model_residuals == "all":
+            first_residual = True
+            rest_residuals = True
+        elif model_residuals == "none":
+            first_residual = False
+            rest_residuals = False
+        elif model_residuals is not None:
+            raise ValueError(f"Unsupported model residuals option: {model_residuals}")
+
         graph_convs = []
         graph_convs.append(
             GNNFactory(
@@ -420,6 +442,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
                 use_edge_weights=use_edge_weights,
                 use_edge_attr=use_edge_attr,
                 edge_dim=edge_dim,
+                residual=first_residual,
                 **gnn_kwargs,
             )
         )
@@ -434,6 +457,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
                     use_edge_weights=use_edge_weights,
                     use_edge_attr=use_edge_attr,
                     edge_dim=edge_dim,
+                    residual=rest_residuals,
                     **gnn_kwargs,
                 )
             )
@@ -561,6 +585,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool]:
             use_edge_weights=args.use_edge_weights,
             use_edge_attr=args.use_edge_attr,
             edge_dim=args.edge_dim,
+            model_residuals=args.model_residuals,
         ).to(device)
         model.reset_parameters()
     elif args.imitation_learning_model == "HGCN":
@@ -578,6 +603,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool]:
             use_edge_weights=args.use_edge_weights,
             use_edge_attr=args.use_edge_attr,
             edge_dim=args.edge_dim,
+            model_residuals=args.model_residuals,
         ).to(device)
     elif args.imitation_learning_model == "HGAT":
         hypergraph_model = True
@@ -597,6 +623,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool]:
             use_edge_weights=args.use_edge_weights,
             use_edge_attr=args.use_edge_attr,
             edge_dim=args.edge_dim,
+            model_residuals=args.model_residuals,
         ).to(device)
     elif args.imitation_learning_model == "HMAGAT":
         hypergraph_model = True
@@ -613,6 +640,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool]:
             use_edge_weights=args.use_edge_weights,
             use_edge_attr=args.use_edge_attr,
             edge_dim=args.edge_dim,
+            model_residuals=args.model_residuals,
         ).to(device)
     elif args.imitation_learning_model == "HMAGAT2":
         hypergraph_model = True
@@ -629,6 +657,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool]:
             use_edge_weights=args.use_edge_weights,
             use_edge_attr=args.use_edge_attr,
             edge_dim=args.edge_dim,
+            model_residuals=args.model_residuals,
         ).to(device)
     elif args.imitation_learning_model == "HMAGAT3":
         hypergraph_model = True
@@ -645,6 +674,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool]:
             use_edge_weights=args.use_edge_weights,
             use_edge_attr=args.use_edge_attr,
             edge_dim=args.edge_dim,
+            model_residuals=args.model_residuals,
         ).to(device)
     else:
         raise ValueError(

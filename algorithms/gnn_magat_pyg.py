@@ -1786,7 +1786,7 @@ class HMAGAT2(BaseHypergraph):
 
 class HMAGAT3(BaseHypergraph):
     def __init__(
-        self, in_channels, out_channels, heads=1, hyperedge_feature_generator="gcn"
+        self, in_channels, out_channels, heads=1, hyperedge_feature_generator="gcn", residual=True,
     ):
         super().__init__(
             in_channels=in_channels,
@@ -1797,13 +1797,16 @@ class HMAGAT3(BaseHypergraph):
         self.out_channels = out_channels
         self.heads = heads
 
+        if residual is None:
+            residual = True
+
         if self.bipartite_hyperedge_feature_generator:
             self.conv = MAGATMultiplicativeConv(
                 in_channels=[in_channels, in_channels],
                 out_channels=out_channels,
                 heads=heads,
                 add_self_loops=False,
-                residual=True,
+                residual=residual,
             )
         else:
             self.conv = MAGATMultiplicativeConv(
@@ -1811,6 +1814,7 @@ class HMAGAT3(BaseHypergraph):
                 out_channels=out_channels,
                 heads=heads,
                 add_self_loops=False,
+                residual=residual,
             )
 
     def forward(self, x, edge_index):
