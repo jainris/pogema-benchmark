@@ -107,6 +107,9 @@ def add_training_args(parser):
     parser.add_argument("--edge_dim", type=int, default=None)
 
     parser.add_argument("--model_residuals", type=str, default=None)
+    parser.add_argument(
+        "--train_on_terminated_agents", action=argparse.BooleanOptionalAction, default=False
+    )
 
     return parser
 
@@ -862,8 +865,9 @@ def main():
 
             out = model(data.x, data)
 
-            out = out[~data.terminated]
-            target_actions = data.y[~data.terminated]
+            if not args.train_on_terminated_agents:
+                out = out[~data.terminated]
+                target_actions = data.y[~data.terminated]
             loss = loss_function(out, target_actions)
 
             total_loss += loss.item()
@@ -895,8 +899,9 @@ def main():
 
                 out = model(data.x, data)
 
-                out = out[~data.terminated]
-                target_actions = data.y[~data.terminated]
+                if not args.train_on_terminated_agents:
+                    out = out[~data.terminated]
+                    target_actions = data.y[~data.terminated]
                 loss = loss_function(out, target_actions)
 
                 total_loss += loss.item()
@@ -939,8 +944,9 @@ def main():
                     data = data.to(device)
                     out = model(data.x, data)
 
-                    out = out[~data.terminated]
-                    target_actions = data.y[~data.terminated]
+                    if not args.train_on_terminated_agents:
+                        out = out[~data.terminated]
+                        target_actions = data.y[~data.terminated]
                     val_correct += (
                         torch.sum(torch.argmax(out, dim=-1) == target_actions)
                         .detach()
