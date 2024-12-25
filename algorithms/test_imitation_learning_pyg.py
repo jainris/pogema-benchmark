@@ -15,11 +15,8 @@ import torch
 
 from run_expert import add_expert_dataset_args
 
-from train_imitation_learning_pyg2 import (
-    run_model_on_grid,
-    add_training_args,
-    get_model,
-)
+from train_imitation_learning_pyg2 import add_training_args
+from agents import run_model_on_grid, get_model
 from test_expert import get_expert_file_name, EXPERT_FILE_NAME_KEYS
 
 
