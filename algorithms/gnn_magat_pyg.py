@@ -31,7 +31,7 @@ if typing.TYPE_CHECKING:
 else:
     from torch.jit import _overload_method as overload
 
-from torch_geometric.nn import HypergraphConv, GCNConv
+from torch_geometric.nn import HypergraphConv, GCNConv, GATv2Conv
 
 
 class MAGATAdditiveConv(MessagePassing):
@@ -1800,7 +1800,12 @@ class HMAGAT2(BaseHypergraph):
 
 class HMAGAT3(BaseHypergraph):
     def __init__(
-        self, in_channels, out_channels, heads=1, hyperedge_feature_generator="gcn", residual=True,
+        self,
+        in_channels,
+        out_channels,
+        heads=1,
+        hyperedge_feature_generator="gcn",
+        residual=True,
     ):
         super().__init__(
             in_channels=in_channels,
@@ -1824,6 +1829,50 @@ class HMAGAT3(BaseHypergraph):
             )
         else:
             self.conv = MAGATMultiplicativeConv(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=heads,
+                add_self_loops=False,
+                residual=residual,
+            )
+
+    def forward(self, x, edge_index):
+        hyperedge_attr = self.generate_hyperedge_features(x, edge_index)
+        edge_index = edge_index[[1, 0]]
+        return self.conv((hyperedge_attr, x), edge_index)
+
+
+class HGATv2(BaseHypergraph):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        heads=1,
+        hyperedge_feature_generator="gcn",
+        residual=True,
+    ):
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            hyperedge_feature_generator=hyperedge_feature_generator,
+        )
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.heads = heads
+
+        if residual is None:
+            residual = True
+
+        if self.bipartite_hyperedge_feature_generator:
+            self.conv = GATv2Conv(
+                in_channels=[in_channels, in_channels],
+                out_channels=out_channels,
+                heads=heads,
+                add_self_loops=False,
+                residual=residual,
+            )
+        else:
+            self.conv = GATv2Conv(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 heads=heads,

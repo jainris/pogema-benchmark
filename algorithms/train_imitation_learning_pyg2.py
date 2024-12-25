@@ -35,7 +35,7 @@ from run_expert import run_expert_algorithm, add_expert_dataset_args
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2
 from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
-from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2, HMAGAT3
+from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2, HMAGAT3, HGATv2
 
 
 def add_training_args(parser):
@@ -253,6 +253,14 @@ def GNNFactory(
             )
         elif model_type == "HMAGAT3":
             return HMAGAT3(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                heads=num_attention_heads,
+                hyperedge_feature_generator=model_kwargs["hyperedge_feature_generator"],
+                **kwargs,
+            )
+        elif model_type == "HGATv2":
+            return HGATv2(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 heads=num_attention_heads,
@@ -679,6 +687,23 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool]:
             edge_dim=args.edge_dim,
             model_residuals=args.model_residuals,
         ).to(device)
+    elif args.imitation_learning_model == "HGATv2":
+        hypergraph_model = True
+        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
+        model = DecentralPlannerGATNet(
+            FOV=args.obs_radius,
+            numInputFeatures=args.embedding_size,
+            num_layers_gnn=args.num_gnn_layers,
+            num_attention_heads=args.num_attention_heads,
+            use_dropout=True,
+            gnn_type="HGATv2",
+            gnn_kwargs=gnn_kwargs,
+            concat_attention=True,
+            use_edge_weights=args.use_edge_weights,
+            use_edge_attr=args.use_edge_attr,
+            edge_dim=args.edge_dim,
+            model_residuals=args.model_residuals,
+        ).to(device)
     else:
         raise ValueError(
             f"Unsupported imitation learning model {args.imitation_learning_model}."
@@ -996,6 +1021,7 @@ def main():
                     args.threshold_val_success_rate = 1.1
                     cur_validation_id_max = validation_id_max
                     best_val_file_name = "best.pt"
+                    best_validation_success_rate = 0.0
                 checkpoint_path = pathlib.Path(
                     f"{args.checkpoints_dir}", best_val_file_name
                 )
