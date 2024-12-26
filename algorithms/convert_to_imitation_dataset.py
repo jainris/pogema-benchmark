@@ -11,7 +11,6 @@ from run_expert import DATASET_FILE_NAME_KEYS, add_expert_dataset_args
 
 def add_imitation_dataset_args(parser):
     parser.add_argument("--comm_radius", type=int, default=7)
-    parser.add_argument("--use_edge_attr", action="store_true", default=False)
     return parser
 
 
@@ -137,6 +136,7 @@ def main():
     )
     parser = add_expert_dataset_args(parser)
     parser = add_imitation_dataset_args(parser)
+    parser.add_argument("--use_edge_attr", action="store_true", default=False)
 
     args = parser.parse_args()
     print(args)
