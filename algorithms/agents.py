@@ -300,7 +300,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         concat_attention,
         num_classes=5,
         cnn_output_size=None,
-        num_layers_gnn=None,
+        num_gnn_layers=None,
         embedding_sizes_gnn=None,
         use_edge_weights=False,
         use_edge_attr=False,
@@ -312,13 +312,13 @@ class DecentralPlannerGATNet(torch.nn.Module):
         assert concat_attention is True, "Currently only support concat attention."
 
         if embedding_sizes_gnn is None:
-            assert num_layers_gnn is not None
-            embedding_sizes_gnn = num_layers_gnn * [numInputFeatures]
+            assert num_gnn_layers is not None
+            embedding_sizes_gnn = num_gnn_layers * [numInputFeatures]
         else:
-            if num_layers_gnn is not None:
-                assert num_layers_gnn == len(embedding_sizes_gnn)
+            if num_gnn_layers is not None:
+                assert num_gnn_layers == len(embedding_sizes_gnn)
             else:
-                num_layers_gnn = len(embedding_sizes_gnn)
+                num_gnn_layers = len(embedding_sizes_gnn)
 
         inW = FOV + 2
         inH = FOV + 2
@@ -380,7 +380,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
             )
         )
 
-        for i in range(num_layers_gnn - 1):
+        for i in range(num_gnn_layers - 1):
             graph_convs.append(
                 GNNFactory(
                     in_channels=num_attention_heads * embedding_sizes_gnn[i],
@@ -498,20 +498,20 @@ class AgentWithTwoNetworks(torch.nn.Module):
             assert gnn_type is not None, "Missing gnn_kwargs."
 
             embedding_sizes_gnn = kwargs.get("embedding_sizes_gnn", None)
-            num_layers_gnn = kwargs.get("num_layers_gnn", None)
+            num_gnn_layers = kwargs.get("num_gnn_layers", None)
             use_edge_weights = kwargs.get("use_edge_weights", False)
             use_edge_attr = kwargs.get("use_edge_attr", False)
             edge_dim = kwargs.get("edge_dim", None)
             model_residuals = kwargs.get("model_residuals", None)
 
             if embedding_sizes_gnn is None:
-                assert num_layers_gnn is not None
-                embedding_sizes_gnn = num_layers_gnn * [numInputFeatures]
+                assert num_gnn_layers is not None
+                embedding_sizes_gnn = num_gnn_layers * [numInputFeatures]
             else:
-                if num_layers_gnn is not None:
-                    assert num_layers_gnn == len(embedding_sizes_gnn)
+                if num_gnn_layers is not None:
+                    assert num_gnn_layers == len(embedding_sizes_gnn)
                 else:
-                    num_layers_gnn = len(embedding_sizes_gnn)
+                    num_gnn_layers = len(embedding_sizes_gnn)
 
             first_residual = None
             rest_residuals = None
@@ -546,7 +546,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 )
             )
 
-            for i in range(num_layers_gnn - 1):
+            for i in range(num_gnn_layers - 1):
                 graph_convs.append(
                     GNNFactory(
                         in_channels=num_attention_heads * embedding_sizes_gnn[i],
@@ -709,7 +709,7 @@ def _decode_args(args: dict, prefix: str = "") -> dict:
     model_kwargs = {
         key: args[key]
         for key in [
-            "num_layers_gnn",
+            "num_gnn_layers",
             "use_edge_attr",
             "use_edge_weights",
             "edge_dim",
