@@ -405,11 +405,12 @@ def main():
 
             for graph_id in range(train_id_max, cur_validation_id_max):
                 success, env, observations = run_model_on_grid(
-                    model,
-                    device,
-                    _grid_config_generator(seeds[graph_id]),
-                    args,
-                    hypergraph_model,
+                    model=model,
+                    device=device,
+                    grid_config=_grid_config_generator(seeds[graph_id]),
+                    args=args,
+                    dataset_kwargs=dataset_kwargs,
+                    hypergraph_model=hypergraph_model,
                 )
 
                 if success:
@@ -469,12 +470,13 @@ def main():
                         on_target=args.on_target,
                     )
                     success, env, observations = run_model_on_grid(
-                        model,
-                        device,
-                        grid_config,
-                        args,
-                        hypergraph_model,
-                        args.max_episode_steps,
+                        model=model,
+                        device=device,
+                        grid_config=grid_config,
+                        args=args,
+                        dataset_kwargs=dataset_kwargs,
+                        hypergraph_model=hypergraph_model,
+                        max_episodes=args.max_episode_steps,
                     )
 
                     if not success:
