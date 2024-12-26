@@ -454,6 +454,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         use_dropout,
         gnn1_kwargs,
         gnn2_kwargs,
+        parallel_or_series,
         concat_attention,
         num_classes=5,
         cnn_output_size=None,
@@ -566,9 +567,24 @@ class AgentWithTwoNetworks(torch.nn.Module):
         graph1_convs, gnn1_last_embd_sz = _define_gnn_convs(gnn1_kwargs)
         graph2_convs, gnn2_last_embd_sz = _define_gnn_convs(gnn2_kwargs)
 
-        assert (
-            gnn1_last_embd_sz == gnn2_last_embd_sz
-        ), "Expecting both output sizes to be the same."
+        self.parallel_or_series = parallel_or_series
+        if parallel_or_series == "parallel":
+            assert (
+                gnn1_last_embd_sz == gnn2_last_embd_sz
+            ), "Expecting both output sizes to be the same."
+        elif self.parallel_or_series == "series":
+            starting_sz = (
+                gnn2_kwargs["embedding_sizes_gnn"][0]
+                if "embedding_sizes_gnn" in gnn2_kwargs
+                else numInputFeatures
+            )
+            assert (
+                num_attention_heads * gnn1_last_embd_sz == starting_sz
+            ), "Expecting the output size of gnn1 to match the input size of gnn2."
+        else:
+            raise ValueError(
+                f"Got Invalid value for parallel_or_series {parallel_or_series}"
+            )
 
         self.gnns1 = torch.nn.ModuleList(graph1_convs)
         self.gnns2 = torch.nn.ModuleList(graph2_convs)
@@ -581,8 +597,8 @@ class AgentWithTwoNetworks(torch.nn.Module):
 
         actionsfc = []
         actions_mlp_sizes = [
-            num_attention_heads * gnn1_last_embd_sz,
-            gnn1_last_embd_sz,
+            num_attention_heads * gnn2_last_embd_sz,
+            gnn2_last_embd_sz,
             num_classes,
         ]
         for i in range(len(actions_mlp_sizes) - 1):
@@ -611,18 +627,25 @@ class AgentWithTwoNetworks(torch.nn.Module):
         x = self.cnn(x)
 
         gnn1_out = x
-        gnn2_out = x
-
         for conv in self.gnns1:
             gnn1_out = conv(gnn1_out, data)
             gnn1_out = F.relu(gnn1_out)
+
+        if self.parallel_or_series == "parallel":
+            gnn2_out = x
+        else:
+            gnn2_out = gnn1_out
         for conv in self.gnns2:
             gnn2_out = conv(gnn2_out, data)
             gnn2_out = F.relu(gnn2_out)
 
         # Combining outputs
         lin = self.actionsMLP[0]
-        x = lin(gnn1_out) + lin(gnn2_out)
+
+        x = lin(gnn2_out)
+        if self.parallel_or_series == "parallel":
+            x = lin(gnn1_out) + x
+
         for lin in self.actionsMLP[1:]:
             x = F.relu(x)
             if self.use_dropout:
@@ -784,13 +807,16 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         hypergraph_model = hypergraph_model or hmodel
         dataset_kwargs = {"use_edge_attr": model_kwargs["use_edge_attr"]}
         model = DecentralPlannerGATNet(**common_kwargs, **model_kwargs).to(device)
-    elif args.agent_network_type == "parallel":
+    elif args.agent_network_type == "parallel" or args.agent_network_type == "series":
         model1_kwargs, hmodel1 = _decode_args(dict_args)
         model2_kwargs, hmodel2 = _decode_args(dict_args, "model2_")
         hmodel = hmodel1 or hmodel2
         assert not (
             args.generate_graph_from_hyperedges and hmodel
         ), "We do not support use of graph inputs with hypergraph models."
+        assert (
+            args.num_attention_heads == args.model2_num_attention_heads
+        ), "Currently require both num attention heads to be the same."  # TODO: Remedy
         if hmodel and (hmodel1 != hmodel2):
             # One of the models does not use hypergraphs, ensuring
             # appropriate edge indices are used
@@ -813,7 +839,10 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
             }
         hypergraph_model = hypergraph_model or hmodel
         model = AgentWithTwoNetworks(
-            **common_kwargs, gnn1_kwargs=model1_kwargs, gnn2_kwargs=model2_kwargs
+            **common_kwargs,
+            gnn1_kwargs=model1_kwargs,
+            gnn2_kwargs=model2_kwargs,
+            parallel_or_series=args.agent_network_type,
         ).to(device)
     else:
         raise ValueError(f"Unsupported agent network type {args.agent_network_type}.")
