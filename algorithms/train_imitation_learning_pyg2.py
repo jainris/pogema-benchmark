@@ -560,7 +560,7 @@ def main():
                         obs_radius=args.obs_radius,
                         num_samples=None,
                         save_termination_state=True,
-                        use_edge_attr=args.use_edge_attr,
+                        use_edge_attr=dataset_kwargs["use_edge_attr"],
                         print_prefix=None,
                     )
                     if oe_graph_dataset is None:

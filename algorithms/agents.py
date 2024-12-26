@@ -660,6 +660,7 @@ def run_model_on_grid(
     grid_config,
     args,
     hypergraph_model,
+    dataset_kwargs,
     max_episodes=None,
     aux_func=None,
 ):
@@ -677,7 +678,7 @@ def run_model_on_grid(
             obs_radius=args.obs_radius,
             num_samples=None,
             save_termination_state=True,
-            use_edge_attr=args.use_edge_attr,
+            use_edge_attr=dataset_kwargs['use_edge_attr'],
             print_prefix=None,
         )
         if hypergraph_model:
@@ -688,9 +689,9 @@ def run_model_on_grid(
                 move_results,
                 args.generate_graph_from_hyperedges,
             )
-            gdata = MAPFHypergraphDataset(gdata, [hindex])[0]
+            gdata = MAPFHypergraphDataset(gdata, [hindex], **dataset_kwargs)[0]
         else:
-            gdata = MAPFGraphDataset(gdata, args.use_edge_attr)[0]
+            gdata = MAPFGraphDataset(gdata, **dataset_kwargs)[0]
 
         gdata.to(device)
 
@@ -817,7 +818,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         assert (
             args.num_attention_heads == args.model2_num_attention_heads
         ), "Currently require both num attention heads to be the same."  # TODO: Remedy
-        if hmodel and (hmodel1 != hmodel2):
+        if hmodel1 != hmodel2:
             # One of the models does not use hypergraphs, ensuring
             # appropriate edge indices are used
             hypergraph_kwargs, graph_kwargs = (
