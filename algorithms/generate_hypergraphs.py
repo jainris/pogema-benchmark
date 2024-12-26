@@ -20,6 +20,20 @@ HYPERGRAPH_FILE_NAME_DEFAULTS = {
 HYPERGRAPH_FILE_NAME_KEYS = list(HYPERGRAPH_FILE_NAME_DEFAULTS.keys())
 
 
+def add_hypergraph_generation_args(parser):
+    parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
+    parser.add_argument("--hypergraph_num_steps", type=int, default=3)
+    parser.add_argument(
+        "--take_all_seeds", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--generate_graph_from_hyperedges",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    return parser
+
+
 def get_hypergraph_file_name(args):
     file_name = ""
     dict_args = vars(args)
@@ -197,17 +211,7 @@ def generate_hypergraph_indices(
 def main():
     parser = argparse.ArgumentParser(description="Generate Hypergraphs")
     parser = add_expert_dataset_args(parser)
-
-    parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
-    parser.add_argument("--hypergraph_num_steps", type=int, default=3)
-    parser.add_argument(
-        "--take_all_seeds", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument(
-        "--generate_graph_from_hyperedges",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-    )
+    parser = add_hypergraph_generation_args(parser)
 
     args = parser.parse_args()
     print(args)

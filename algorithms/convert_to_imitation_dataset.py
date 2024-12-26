@@ -9,6 +9,12 @@ from scipy.spatial.distance import squareform, pdist
 from run_expert import DATASET_FILE_NAME_KEYS, add_expert_dataset_args
 
 
+def add_imitation_dataset_args(parser):
+    parser.add_argument("--comm_radius", type=int, default=7)
+    parser.add_argument("--use_edge_attr", action="store_true", default=False)
+    return parser
+
+
 def get_imitation_dataset_file_name(args):
     file_name = ""
     dict_args = vars(args)
@@ -130,9 +136,7 @@ def main():
         description="Convert to Imitation Learning Dataset"
     )
     parser = add_expert_dataset_args(parser)
-
-    parser.add_argument("--comm_radius", type=int, default=7)
-    parser.add_argument("--use_edge_attr", action="store_true", default=False)
+    parser = add_imitation_dataset_args(parser)
 
     args = parser.parse_args()
     print(args)

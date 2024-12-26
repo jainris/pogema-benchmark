@@ -27,6 +27,7 @@ class GNNWrapper(torch.nn.Module):
         gnn,
         use_edge_weights=False,
         use_edge_attr=False,
+        access_graph_index=False,
     ):
         super().__init__()
         assert (not use_edge_weights) or (
@@ -34,17 +35,27 @@ class GNNWrapper(torch.nn.Module):
         ), "Currently, do not support use of both edge weights and edge attr"
         self.use_edge_weights = use_edge_weights
         self.use_edge_attr = use_edge_attr
+        self.access_graph_index = access_graph_index
         self.gnn = gnn
 
     def reset_parameters(self):
         self.gnn.reset_parameters()
 
     def forward(self, x, data):
+        if self.access_graph_index:
+            edge_index = data.graph_edge_index
+        else:
+            edge_index = data.edge_index
+
         if self.use_edge_weights:
-            return self.gnn(x, data.edge_index, data.edge_weight)
+            return self.gnn(
+                x,
+                edge_index,
+                data.graph_edge_weight if self.access_graph_index else data.edge_weight,
+            )
         if self.use_edge_attr:
-            return self.gnn(x, data.edge_index, data.edge_attr)
-        return self.gnn(x, data.edge_index)
+            return self.gnn(x, edge_index, data.edge_attr)
+        return self.gnn(x, edge_index)
 
 
 def GNNFactory(
@@ -56,6 +67,7 @@ def GNNFactory(
     use_edge_attr=False,
     edge_dim=None,
     residual=None,
+    access_graph_index=False,
     **model_kwargs,
 ):
     if use_edge_attr:
@@ -178,7 +190,10 @@ def GNNFactory(
             raise ValueError(f"Currently, we don't support model: {model_type}")
 
     return GNNWrapper(
-        _factory(), use_edge_weights=use_edge_weights, use_edge_attr=use_edge_attr
+        _factory(),
+        use_edge_weights=use_edge_weights,
+        use_edge_attr=use_edge_attr,
+        access_graph_index=access_graph_index,
     )
 
 
@@ -429,6 +444,193 @@ class DecentralPlannerGATNet(torch.nn.Module):
         return x
 
 
+class AgentWithTwoNetworks(torch.nn.Module):
+    def __init__(
+        self,
+        *,
+        FOV,
+        numInputFeatures,
+        num_attention_heads,
+        use_dropout,
+        gnn1_kwargs,
+        gnn2_kwargs,
+        concat_attention,
+        num_classes=5,
+        cnn_output_size=None,
+    ):
+        super().__init__()
+
+        assert concat_attention is True, "Currently only support concat attention."
+
+        inW = FOV + 2
+        inH = FOV + 2
+
+        if cnn_output_size is None:
+            cnn_output_size = numInputFeatures
+
+        #####################################################################
+        #                                                                   #
+        #                CNN to extract feature                             #
+        #                                                                   #
+        #####################################################################
+        self.cnn = CNN(
+            numChannel=[3, 32, 32, 64, 64, 128],
+            numStride=[1, 1, 1, 1, 1],
+            convW=inW,
+            convH=inH,
+            nMaxPoolFilterTaps=2,
+            numMaxPoolStride=2,
+            embedding_sizes=[cnn_output_size],
+        )
+
+        self.numFeatures2Share = cnn_output_size
+
+        #####################################################################
+        #                                                                   #
+        #                    graph neural network                           #
+        #                                                                   #
+        #####################################################################
+
+        def _define_gnn_convs(kwargs: dict) -> tuple[Sequence[torch.nn.Module], int]:
+            gnn_type = kwargs.get("gnn_type", None)
+            assert gnn_type is not None, "Missing gnn_type."
+            gnn_kwargs = kwargs.get("gnn_kwargs", None)
+            assert gnn_type is not None, "Missing gnn_kwargs."
+
+            embedding_sizes_gnn = kwargs.get("embedding_sizes_gnn", None)
+            num_layers_gnn = kwargs.get("num_layers_gnn", None)
+            use_edge_weights = kwargs.get("use_edge_weights", False)
+            use_edge_attr = kwargs.get("use_edge_attr", False)
+            edge_dim = kwargs.get("edge_dim", None)
+            model_residuals = kwargs.get("model_residuals", None)
+
+            if embedding_sizes_gnn is None:
+                assert num_layers_gnn is not None
+                embedding_sizes_gnn = num_layers_gnn * [numInputFeatures]
+            else:
+                if num_layers_gnn is not None:
+                    assert num_layers_gnn == len(embedding_sizes_gnn)
+                else:
+                    num_layers_gnn = len(embedding_sizes_gnn)
+
+            first_residual = None
+            rest_residuals = None
+            if model_residuals == "first":
+                first_residual = True
+            elif model_residuals == "only-first":
+                first_residual = True
+                rest_residuals = False
+            elif model_residuals == "all":
+                first_residual = True
+                rest_residuals = True
+            elif model_residuals == "none":
+                first_residual = False
+                rest_residuals = False
+            elif model_residuals is not None:
+                raise ValueError(
+                    f"Unsupported model residuals option: {model_residuals}"
+                )
+
+            graph_convs = []
+            graph_convs.append(
+                GNNFactory(
+                    in_channels=self.numFeatures2Share,
+                    out_channels=embedding_sizes_gnn[0],
+                    model_type=gnn_type,
+                    num_attention_heads=num_attention_heads,
+                    use_edge_weights=use_edge_weights,
+                    use_edge_attr=use_edge_attr,
+                    edge_dim=edge_dim,
+                    residual=first_residual,
+                    **gnn_kwargs,
+                )
+            )
+
+            for i in range(num_layers_gnn - 1):
+                graph_convs.append(
+                    GNNFactory(
+                        in_channels=num_attention_heads * embedding_sizes_gnn[i],
+                        out_channels=embedding_sizes_gnn[i + 1],
+                        model_type=gnn_type,
+                        num_attention_heads=num_attention_heads,
+                        use_edge_weights=use_edge_weights,
+                        use_edge_attr=use_edge_attr,
+                        edge_dim=edge_dim,
+                        residual=rest_residuals,
+                        **gnn_kwargs,
+                    )
+                )
+
+            return graph_convs, embedding_sizes_gnn[-1]
+
+        graph1_convs, gnn1_last_embd_sz = _define_gnn_convs(gnn1_kwargs)
+        graph2_convs, gnn2_last_embd_sz = _define_gnn_convs(gnn2_kwargs)
+
+        assert (
+            gnn1_last_embd_sz == gnn2_last_embd_sz
+        ), "Expecting both output sizes to be the same."
+
+        self.gnns1 = torch.nn.ModuleList(graph1_convs)
+        self.gnns2 = torch.nn.ModuleList(graph2_convs)
+
+        #####################################################################
+        #                                                                   #
+        #                    MLP --- map to actions                         #
+        #                                                                   #
+        #####################################################################
+
+        actionsfc = []
+        actions_mlp_sizes = [
+            num_attention_heads * gnn1_last_embd_sz,
+            gnn1_last_embd_sz,
+            num_classes,
+        ]
+        for i in range(len(actions_mlp_sizes) - 1):
+            actionsfc.append(
+                torch.nn.Linear(
+                    in_features=actions_mlp_sizes[i],
+                    out_features=actions_mlp_sizes[i + 1],
+                )
+            )
+        self.use_dropout = use_dropout
+        self.actionsMLP = torch.nn.ModuleList(actionsfc)
+
+    def reset_parameters(self, non_default=False):
+        if non_default:
+            self.apply(weights_init)
+        else:
+            self.cnn.reset_parameters()
+            for gnn in self.gnns1:
+                gnn.reset_parameters()
+            for gnn in self.gnns2:
+                gnn.reset_parameters()
+            for lin in self.actionsMLP:
+                lin.reset_parameters()
+
+    def forward(self, x, data):
+        x = self.cnn(x)
+
+        gnn1_out = x
+        gnn2_out = x
+
+        for conv in self.gnns1:
+            gnn1_out = conv(gnn1_out, data)
+            gnn1_out = F.relu(gnn1_out)
+        for conv in self.gnns2:
+            gnn2_out = conv(gnn2_out, data)
+            gnn2_out = F.relu(gnn2_out)
+
+        # Combining outputs
+        lin = self.actionsMLP[0]
+        x = lin(gnn1_out) + lin(gnn2_out)
+        for lin in self.actionsMLP[1:]:
+            x = F.relu(x)
+            if self.use_dropout:
+                x = F.dropout(x, p=0.2, training=self.training)
+            x = lin(x)
+        return x
+
+
 def run_model_on_grid(
     model,
     device,
@@ -487,132 +689,132 @@ def run_model_on_grid(
     return all(terminated), env, observations
 
 
-def get_model(args, device) -> tuple[torch.nn.Module, bool]:
-    hypergraph_model = args.generate_graph_from_hyperedges
-    if args.imitation_learning_model == "MAGAT":
-        gnn_kwargs = {"attentionMode": args.attention_mode}
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            num_layers_gnn=args.num_gnn_layers,
-            num_attention_heads=args.num_attention_heads,
-            use_dropout=True,
-            gnn_type="MAGAT",
-            gnn_kwargs=gnn_kwargs,
-            concat_attention=True,
-            use_edge_weights=args.use_edge_weights,
-            use_edge_attr=args.use_edge_attr,
-            edge_dim=args.edge_dim,
-            model_residuals=args.model_residuals,
-        ).to(device)
-        model.reset_parameters()
-    elif args.imitation_learning_model == "HGCN":
+_GNN_DEF_KEYS = [
+    "imitation_learning_model",
+    "embedding_size",
+    "num_gnn_layers",
+    "num_attention_heads",
+    "attention_mode",
+    "edge_dim",
+    "model_residuals",
+    "use_edge_weights",
+    "use_edge_attr",
+    "hyperedge_feature_generator",
+]
+
+
+def _decode_args(args: dict, prefix: str = "") -> dict:
+    hypergraph_model = False
+    args = {key: args[f"{prefix}{key}"] for key in _GNN_DEF_KEYS}
+    model_kwargs = {
+        key: args[key]
+        for key in [
+            "num_layers_gnn",
+            "use_edge_attr",
+            "use_edge_weights",
+            "edge_dim",
+            "model_residuals",
+        ]
+    }
+    if args["imitation_learning_model"] == "MAGAT":
+        gnn_kwargs = {"attentionMode": args["attention_mode"]}
+        gnn_type = "MAGAT"
+    elif args["imitation_learning_model"] == "HGCN":
         hypergraph_model = True
         gnn_kwargs = {"use_attention": False}
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            num_layers_gnn=args.num_gnn_layers,
-            num_attention_heads=args.num_attention_heads,
-            use_dropout=True,
-            gnn_type="HCHA",
-            gnn_kwargs=gnn_kwargs,
-            concat_attention=True,
-            use_edge_weights=args.use_edge_weights,
-            use_edge_attr=args.use_edge_attr,
-            edge_dim=args.edge_dim,
-            model_residuals=args.model_residuals,
-        ).to(device)
-    elif args.imitation_learning_model == "HGAT":
+        gnn_type = "HCHA"
+    elif args["imitation_learning_model"] == "HGAT":
         hypergraph_model = True
         gnn_kwargs = {
             "use_attention": True,
-            "hyperedge_feature_generator": args.hyperedge_feature_generator,
+            "hyperedge_feature_generator": args["hyperedge_feature_generator"],
         }
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            num_layers_gnn=args.num_gnn_layers,
-            num_attention_heads=args.num_attention_heads,
-            use_dropout=True,
-            gnn_type="HCHA",
-            gnn_kwargs=gnn_kwargs,
-            concat_attention=True,
-            use_edge_weights=args.use_edge_weights,
-            use_edge_attr=args.use_edge_attr,
-            edge_dim=args.edge_dim,
-            model_residuals=args.model_residuals,
-        ).to(device)
-    elif args.imitation_learning_model == "HMAGAT":
+        gnn_type = "HCHA"
+    elif args["imitation_learning_model"] == "HMAGAT":
         hypergraph_model = True
-        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            num_layers_gnn=args.num_gnn_layers,
-            num_attention_heads=args.num_attention_heads,
-            use_dropout=True,
-            gnn_type="HMAGAT",
-            gnn_kwargs=gnn_kwargs,
-            concat_attention=True,
-            use_edge_weights=args.use_edge_weights,
-            use_edge_attr=args.use_edge_attr,
-            edge_dim=args.edge_dim,
-            model_residuals=args.model_residuals,
-        ).to(device)
-    elif args.imitation_learning_model == "HMAGAT2":
+        gnn_kwargs = {
+            "hyperedge_feature_generator": args["hyperedge_feature_generator"]
+        }
+        gnn_type = "HMAGAT"
+    elif args["imitation_learning_model"] == "HMAGAT2":
         hypergraph_model = True
-        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            num_layers_gnn=args.num_gnn_layers,
-            num_attention_heads=args.num_attention_heads,
-            use_dropout=True,
-            gnn_type="HMAGAT2",
-            gnn_kwargs=gnn_kwargs,
-            concat_attention=True,
-            use_edge_weights=args.use_edge_weights,
-            use_edge_attr=args.use_edge_attr,
-            edge_dim=args.edge_dim,
-            model_residuals=args.model_residuals,
-        ).to(device)
-    elif args.imitation_learning_model == "HMAGAT3":
+        gnn_kwargs = {
+            "hyperedge_feature_generator": args["hyperedge_feature_generator"]
+        }
+        gnn_type = "HMAGAT2"
+    elif args["imitation_learning_model"] == "HMAGAT3":
         hypergraph_model = True
-        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            num_layers_gnn=args.num_gnn_layers,
-            num_attention_heads=args.num_attention_heads,
-            use_dropout=True,
-            gnn_type="HMAGAT3",
-            gnn_kwargs=gnn_kwargs,
-            concat_attention=True,
-            use_edge_weights=args.use_edge_weights,
-            use_edge_attr=args.use_edge_attr,
-            edge_dim=args.edge_dim,
-            model_residuals=args.model_residuals,
-        ).to(device)
-    elif args.imitation_learning_model == "HGATv2":
+        gnn_kwargs = {
+            "hyperedge_feature_generator": args["hyperedge_feature_generator"]
+        }
+        gnn_type = "HMAGAT3"
+    elif args["imitation_learning_model"] == "HGATv2":
         hypergraph_model = True
-        gnn_kwargs = {"hyperedge_feature_generator": args.hyperedge_feature_generator}
-        model = DecentralPlannerGATNet(
-            FOV=args.obs_radius,
-            numInputFeatures=args.embedding_size,
-            num_layers_gnn=args.num_gnn_layers,
-            num_attention_heads=args.num_attention_heads,
-            use_dropout=True,
-            gnn_type="HGATv2",
-            gnn_kwargs=gnn_kwargs,
-            concat_attention=True,
-            use_edge_weights=args.use_edge_weights,
-            use_edge_attr=args.use_edge_attr,
-            edge_dim=args.edge_dim,
-            model_residuals=args.model_residuals,
-        ).to(device)
+        gnn_kwargs = {
+            "hyperedge_feature_generator": args["hyperedge_feature_generator"]
+        }
+        gnn_type = "HGATv2"
     else:
         raise ValueError(
-            f"Unsupported imitation learning model {args.imitation_learning_model}."
+            f"Unsupported imitation learning model {args['imitation_learning_model']}."
         )
-    return model, hypergraph_model
+    model_kwargs = model_kwargs | {
+        "gnn_kwargs": gnn_kwargs,
+        "gnn_type": gnn_type,
+    }
+    return model_kwargs, hypergraph_model
+
+
+def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
+    hypergraph_model = args.generate_graph_from_hyperedges
+    common_kwargs = dict(
+        FOV=args.obs_radius,
+        numInputFeatures=args.embedding_size,
+        num_attention_heads=args.num_attention_heads,
+        use_dropout=True,
+        concat_attention=True,
+        num_classes=5,
+    )
+    dict_args = vars(args)
+    if args.agent_network_type == "single":
+        model_kwargs, hmodel = _decode_args(dict_args)
+        assert not (
+            args.generate_graph_from_hyperedges and hmodel
+        ), "We do not support use of graph inputs with hypergraph models."
+        hypergraph_model = hypergraph_model or hmodel
+        dataset_kwargs = {"use_edge_attr": model_kwargs["use_edge_attr"]}
+        model = DecentralPlannerGATNet(**common_kwargs, **model_kwargs).to(device)
+    elif args.agent_network_type == "parallel":
+        model1_kwargs, hmodel1 = _decode_args(dict_args)
+        model2_kwargs, hmodel2 = _decode_args(dict_args, "model2_")
+        hmodel = hmodel1 or hmodel2
+        assert not (
+            args.generate_graph_from_hyperedges and hmodel
+        ), "We do not support use of graph inputs with hypergraph models."
+        if hmodel and (hmodel1 != hmodel2):
+            # One of the models does not use hypergraphs, ensuring
+            # appropriate edge indices are used
+            hypergraph_kwargs, graph_kwargs = (
+                (model1_kwargs, model2_kwargs)
+                if hmodel1
+                else (model2_kwargs, model1_kwargs)
+            )
+            graph_kwargs["access_graph_index"] = True
+            dataset_kwargs = {
+                "use_edge_attr": hypergraph_kwargs["use_edge_attr"],
+                "store_graph_indices": True,
+                "use_graph_edge_attr": graph_kwargs["use_edge_attr"],
+            }
+        else:
+            dataset_kwargs = {
+                "use_edge_attr": (
+                    model1_kwargs["use_edge_attr"] or model2_kwargs["use_edge_attr"]
+                )
+            }
+        hypergraph_model = hypergraph_model or hmodel
+        model = AgentWithTwoNetworks(
+            **common_kwargs, gnn1_kwargs=model1_kwargs, gnn2_kwargs=model2_kwargs
+        ).to(device)
+    else:
+        raise ValueError(f"Unsupported agent network type {args.agent_network_type}.")
+    return model, hypergraph_model, dataset_kwargs

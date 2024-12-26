@@ -1,10 +1,7 @@
-from typing import Sequence
-
 import argparse
 import pickle
 import pathlib
 import numpy as np
-import sys
 import wandb
 
 from multiprocessing import Process, Queue
@@ -14,8 +11,6 @@ from pogema import GridConfig
 
 from lacam.inference import LacamInference, LacamInferenceConfig
 
-sys.path.append("./magat_pathplanning")
-
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -23,10 +18,15 @@ import torch.optim as optim
 from torch_geometric.loader import DataLoader
 
 from convert_to_imitation_dataset import (
+    add_imitation_dataset_args,
     generate_graph_dataset,
     get_imitation_dataset_file_name,
 )
-from generate_hypergraphs import generate_hypergraph_indices, get_hypergraph_file_name
+from generate_hypergraphs import (
+    add_hypergraph_generation_args,
+    generate_hypergraph_indices,
+    get_hypergraph_file_name,
+)
 from generate_pos import get_pos_file_name
 from run_expert import run_expert_algorithm, add_expert_dataset_args
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
@@ -35,18 +35,44 @@ from agents import run_model_on_grid, get_model
 
 
 def add_training_args(parser):
-    parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
-
-    parser.add_argument("--comm_radius", type=int, default=7)
-
     parser.add_argument("--validation_fraction", type=float, default=0.15)
     parser.add_argument("--test_fraction", type=float, default=0.15)
     parser.add_argument("--num_training_oe", type=int, default=500)
     parser.add_argument("--batch_size", type=int, default=64)
 
+    parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
     parser.add_argument("--embedding_size", type=int, default=128)
     parser.add_argument("--num_gnn_layers", type=int, default=3)
     parser.add_argument("--num_attention_heads", type=int, default=1)
+    parser.add_argument("--attention_mode", type=str, default="GAT_modified")
+    parser.add_argument("--edge_dim", type=int, default=None)
+    parser.add_argument("--model_residuals", type=str, default=None)
+    parser.add_argument(
+        "--use_edge_weights", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--use_edge_attr", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument("--hyperedge_feature_generator", type=str, default="gcn")
+
+    parser.add_argument("--agent_network_type", type=str, default="single")
+
+    parser.add_argument("--model2_imitation_learning_model", type=str, default="MAGAT")
+    parser.add_argument("--model2_embedding_size", type=int, default=128)
+    parser.add_argument("--model2_num_gnn_layers", type=int, default=3)
+    parser.add_argument("--model2_num_attention_heads", type=int, default=1)
+    parser.add_argument("--model2_attention_mode", type=str, default="GAT_modified")
+    parser.add_argument("--model2_edge_dim", type=int, default=None)
+    parser.add_argument("--model2_model_residuals", type=str, default=None)
+    parser.add_argument(
+        "--model2_use_edge_weights",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument(
+        "--model2_use_edge_attr", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument("--model2_hyperedge_feature_generator", type=str, default="gcn")
 
     parser.add_argument("--lr_start", type=float, default=1e-3)
     parser.add_argument("--lr_end", type=float, default=1e-6)
@@ -77,32 +103,12 @@ def add_training_args(parser):
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
     parser.add_argument("--num_run_oe", type=int, default=500)
     parser.add_argument("--run_oe_after", type=int, default=0)
-    parser.add_argument("--attention_mode", type=str, default="GAT_modified")
 
-    parser.add_argument("--hypergraph_greedy_distance", type=int, default=2)
-    parser.add_argument("--hypergraph_num_steps", type=int, default=3)
-
-    parser.add_argument("--hyperedge_feature_generator", type=str, default="gcn")
-    parser.add_argument(
-        "--generate_graph_from_hyperedges",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-    )
-
-    parser.add_argument(
-        "--use_edge_weights", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument(
-        "--use_edge_attr", action=argparse.BooleanOptionalAction, default=False
-    )
     parser.add_argument(
         "--load_positions_separately",
         action=argparse.BooleanOptionalAction,
         default=False,
     )
-    parser.add_argument("--edge_dim", type=int, default=None)
-
-    parser.add_argument("--model_residuals", type=str, default=None)
     parser.add_argument(
         "--train_on_terminated_agents",
         action=argparse.BooleanOptionalAction,
@@ -115,6 +121,8 @@ def add_training_args(parser):
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
     parser = add_expert_dataset_args(parser)
+    parser = add_imitation_dataset_args(parser)
+    parser = add_hypergraph_generation_args(parser)
     parser = add_training_args(parser)
 
     args = parser.parse_args()
@@ -166,7 +174,7 @@ def main():
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
 
     torch.manual_seed(args.model_seed)
-    model, hypergraph_model = get_model(args, device)
+    model, hypergraph_model, dataset_kwargs = get_model(args, device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr_start, weight_decay=1e-5)
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -225,13 +233,15 @@ def main():
     # test_dataset = _divide_dataset(validation_id_max, torch.inf)
 
     if hypergraph_model:
-        train_dataset = MAPFHypergraphDataset(train_dataset, train_hindices)
+        train_dataset = MAPFHypergraphDataset(
+            train_dataset, train_hindices, **dataset_kwargs
+        )
         validation_dataset = MAPFHypergraphDataset(
-            validation_dataset, validation_hindices
+            validation_dataset, validation_hindices, **dataset_kwargs
         )
     else:
-        train_dataset = MAPFGraphDataset(train_dataset, args.use_edge_attr)
-        validation_dataset = MAPFGraphDataset(validation_dataset, args.use_edge_attr)
+        train_dataset = MAPFGraphDataset(train_dataset, **dataset_kwargs)
+        validation_dataset = MAPFGraphDataset(validation_dataset, **dataset_kwargs)
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
     validation_dl = DataLoader(validation_dataset, batch_size=args.batch_size)
 
@@ -311,12 +321,14 @@ def main():
         if oe_graph_dataset is not None:
             if hypergraph_model:
                 oe_dl = DataLoader(
-                    MAPFHypergraphDataset(oe_graph_dataset, oe_hypergraph_indices),
+                    MAPFHypergraphDataset(
+                        oe_graph_dataset, oe_hypergraph_indices, **dataset_kwargs
+                    ),
                     batch_size=args.batch_size,
                 )
             else:
                 oe_dl = DataLoader(
-                    MAPFGraphDataset(oe_graph_dataset, args.use_edge_attr),
+                    MAPFGraphDataset(oe_graph_dataset, **dataset_kwargs),
                     batch_size=args.batch_size,
                 )
 
