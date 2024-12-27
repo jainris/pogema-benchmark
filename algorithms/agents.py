@@ -826,7 +826,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
                 if hmodel1
                 else (model2_kwargs, model1_kwargs)
             )
-            graph_kwargs["access_graph_index"] = True
+            graph_kwargs["gnn_kwargs"]["access_graph_index"] = True
             dataset_kwargs = {
                 "use_edge_attr": hypergraph_kwargs["use_edge_attr"],
                 "store_graph_indices": True,
