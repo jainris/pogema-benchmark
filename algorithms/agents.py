@@ -1,15 +1,11 @@
 from typing import Sequence
 
 import numpy as np
-import sys
 
 from pogema import pogema_v0
 
-sys.path.append("./magat_pathplanning")
-
 import torch
 import torch.nn.functional as F
-from graphs.weights_initializer import weights_init
 
 from torch_geometric.nn import GATConv, GATv2Conv, HypergraphConv
 
@@ -420,15 +416,12 @@ class DecentralPlannerGATNet(torch.nn.Module):
         self.use_dropout = use_dropout
         self.actionsMLP = torch.nn.ModuleList(actionsfc)
 
-    def reset_parameters(self, non_default=False):
-        if non_default:
-            self.apply(weights_init)
-        else:
-            self.cnn.reset_parameters()
-            for gnn in self.gnns:
-                gnn.reset_parameters()
-            for lin in self.actionsMLP:
-                lin.reset_parameters()
+    def reset_parameters(self):
+        self.cnn.reset_parameters()
+        for gnn in self.gnns:
+            gnn.reset_parameters()
+        for lin in self.actionsMLP:
+            lin.reset_parameters()
 
     def forward(self, x, data):
         x = self.cnn(x)
@@ -611,17 +604,14 @@ class AgentWithTwoNetworks(torch.nn.Module):
         self.use_dropout = use_dropout
         self.actionsMLP = torch.nn.ModuleList(actionsfc)
 
-    def reset_parameters(self, non_default=False):
-        if non_default:
-            self.apply(weights_init)
-        else:
-            self.cnn.reset_parameters()
-            for gnn in self.gnns1:
-                gnn.reset_parameters()
-            for gnn in self.gnns2:
-                gnn.reset_parameters()
-            for lin in self.actionsMLP:
-                lin.reset_parameters()
+    def reset_parameters(self):
+        self.cnn.reset_parameters()
+        for gnn in self.gnns1:
+            gnn.reset_parameters()
+        for gnn in self.gnns2:
+            gnn.reset_parameters()
+        for lin in self.actionsMLP:
+            lin.reset_parameters()
 
     def forward(self, x, data):
         x = self.cnn(x)
@@ -678,7 +668,7 @@ def run_model_on_grid(
             obs_radius=args.obs_radius,
             num_samples=None,
             save_termination_state=True,
-            use_edge_attr=dataset_kwargs['use_edge_attr'],
+            use_edge_attr=dataset_kwargs["use_edge_attr"],
             print_prefix=None,
         )
         if hypergraph_model:
