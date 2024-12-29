@@ -2,20 +2,19 @@ import argparse
 import pickle
 import pathlib
 import numpy as np
-import sys
 import wandb
 from collections import OrderedDict
 
 
 from pogema import GridConfig
 
-sys.path.append("./magat_pathplanning")
-
 import torch
 
 from run_expert import add_expert_dataset_args
 
 from train_imitation_learning_pyg2 import add_training_args
+from convert_to_imitation_dataset import add_imitation_dataset_args
+from generate_hypergraphs import add_hypergraph_generation_args
 from agents import run_model_on_grid, get_model
 from test_expert import get_expert_file_name, EXPERT_FILE_NAME_KEYS
 
@@ -33,8 +32,10 @@ def load_from_legacy_state_dict(state_dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train imitation learning model.")
+    parser = argparse.ArgumentParser(description="Test imitation learning model.")
     parser = add_expert_dataset_args(parser)
+    parser = add_imitation_dataset_args(parser)
+    parser = add_hypergraph_generation_args(parser)
     parser = add_training_args(parser)
 
     parser.add_argument(
@@ -219,7 +220,7 @@ def main():
         else:
             raise ValueError(f"Unsupported map type: {args.test_map_type}.")
 
-    model, hypergraph_model = get_model(args, device)
+    model, hypergraph_model, dataset_kwargs = get_model(args, device)
 
     run_name = f"{args.test_name}_{args.run_name}"
     wandb.init(
@@ -272,7 +273,13 @@ def main():
         else:
             grid_config = _grid_config_generator(seed)
         success, env, _ = run_model_on_grid(
-            model, device, grid_config, args, hypergraph_model, aux_func=aux_func
+            model,
+            device,
+            grid_config,
+            args,
+            hypergraph_model,
+            dataset_kwargs=dataset_kwargs,
+            aux_func=aux_func,
         )
         makespan = aux_func.makespan
         flowtime = aux_func.flowtime
