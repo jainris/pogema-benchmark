@@ -122,6 +122,24 @@ def add_training_args(parser):
     return parser
 
 
+def generate_grid_config_from_env(env):
+    config = env.grid.config
+    return GridConfig(
+        num_agents=config.num_agents,  # number of agents
+        size=config.size,  # size of the grid
+        density=config.density,  # obstacle density
+        seed=config.seed,
+        max_episode_steps=config.max_episode_steps,  # horizon
+        obs_radius=config.obs_radius,  # defines field of view
+        observation_type=config.observation_type,
+        collision_system=config.collision_system,
+        on_target=config.on_target,
+        map=env.grid.get_obstacles(ignore_borders=True).tolist(),
+        agents_xy=env.grid.get_agents_xy(ignore_borders=True),
+        targets_xy=env.grid.get_targets_xy(ignore_borders=True),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
     parser = add_expert_dataset_args(parser)
@@ -264,19 +282,17 @@ def main():
     def multiprocess_run_expert(
         queue,
         expert,
-        env,
-        observations,
+        grid_config,
         save_termination_state,
         additional_data_func=None,
     ):
         expert_results = run_expert_algorithm(
             expert,
-            env=env,
-            observations=observations,
+            grid_config=grid_config,
             save_termination_state=save_termination_state,
             additional_data_func=additional_data_func,
         )
-        queue.put(expert_results)
+        queue.put((*expert_results, grid_config))
 
     move_results = np.array(grid_config.MOVES)
 
@@ -460,23 +476,10 @@ def main():
 
                 for i, graph_id in enumerate(oe_ids):
                     print(f"Running model on {i}/{args.num_run_oe} ", end="")
-                    grid_config = GridConfig(
-                        num_agents=num_agents,  # number of agents
-                        size=args.map_w,  # size of the grid
-                        density=args.obstacle_density,  # obstacle density
-                        seed=seeds[graph_id],  # set to None for random
-                        # obstacles, agents and targets
-                        # positions at each reset
-                        max_episode_steps=2 * args.max_episode_steps,  # horizon
-                        obs_radius=args.obs_radius,  # defines field of view
-                        observation_type="MAPF",
-                        collision_system=args.collision_system,
-                        on_target=args.on_target,
-                    )
                     success, env, observations = run_model_on_grid(
                         model=model,
                         device=device,
-                        grid_config=grid_config,
+                        grid_config=_grid_config_generator(seeds[graph_id]),
                         args=args,
                         dataset_kwargs=dataset_kwargs,
                         hypergraph_model=hypergraph_model,
@@ -490,14 +493,14 @@ def main():
                         additional_data_func = (
                             get_hypergraph_indices if hypergraph_model else None
                         )
+                        grid_config = generate_grid_config_from_env(env)
 
                         p = Process(
                             target=multiprocess_run_expert,
                             args=(
                                 queue,
                                 expert,
-                                env,
-                                observations,
+                                grid_config,
                                 args.save_termination_state,
                                 additional_data_func,
                             ),
@@ -524,11 +527,15 @@ def main():
                                     all_observations,
                                     all_terminated,
                                     hindices,
+                                    grid_config,
                                 ) = expert_results
                             else:
-                                all_actions, all_observations, all_terminated = (
-                                    expert_results
-                                )
+                                (
+                                    all_actions,
+                                    all_observations,
+                                    all_terminated,
+                                    grid_config,
+                                ) = expert_results
                             if all(all_terminated[-1]):
                                 print(f"-- Success")
                                 oe_dataset.append(
@@ -551,9 +558,12 @@ def main():
                             all_observations,
                             all_terminated,
                             hindices,
+                            grid_config,
                         ) = expert_results
                     else:
-                        all_actions, all_observations, all_terminated = expert_results
+                        all_actions, all_observations, all_terminated, grid_config = (
+                            expert_results
+                        )
                     oe_dataset.append((all_observations, all_actions, all_terminated))
                     oe_hindices.extend(hindices)
 
