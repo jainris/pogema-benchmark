@@ -1,5 +1,5 @@
 from typing import Sequence
-
+from collections import OrderedDict
 import numpy as np
 
 from pogema import pogema_v0
@@ -779,6 +779,68 @@ def _decode_args(args: dict, prefix: str = "") -> dict:
     return model_kwargs, hypergraph_model
 
 
+def update_partial_state_dict(
+    state_dict,
+    old_key_name="gnns",
+    new_key_name="gnns1",
+    check_and_update_legacy_model=True,
+):
+    new_state_dict = OrderedDict()
+    for key in state_dict.keys():
+        k2 = key.split(".")
+        if k2[0] == old_key_name:
+            if check_and_update_legacy_model and (k2[2] != "gnn"):
+                k2[1] = f"{k2[1]}.gnn"
+            if new_key_name is not None:
+                k2[0] = new_key_name
+            new_state_dict[".".join(k2)] = state_dict[key]
+        else:
+            new_state_dict[key] = state_dict[key]
+    return new_state_dict
+
+
+def get_parameters_to_freeze(state_dict, config):
+    if (config is None) or (config == "none"):
+        return []
+    elif config == "all":
+        return state_dict.keys()
+
+    # Splitting config, as it's not a keyword arg
+    config = config.split("+")
+    parameters_to_freeze = []
+    for name in state_dict.keys():
+        for c in config:
+            if c == name[: len(c)]:
+                parameters_to_freeze.append(name)
+    return parameters_to_freeze
+
+
+def load_and_freeze_parameters(model, args, device):
+    state_dict = torch.load(args.load_partial_parameters_path, map_location=device)
+    state_dict = update_partial_state_dict(state_dict, new_key_name=args.replace_model)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+
+    assert (
+        len(unexpected_keys) == 0
+    ), f"Got some unexpected keys to the model {unexpected_keys}"
+
+    parameters_to_freeze = get_parameters_to_freeze(
+        state_dict, args.parameters_to_freeze
+    )
+    for name, parameter in model.named_parameters():
+        if name in parameters_to_freeze:
+            parameter.requires_grad_(False)
+
+    # Printing keys that will be trained
+    to_trains = set()
+    for name, parameter in model.named_parameters():
+        if parameter.requires_grad:
+            to_trains.add(name.split(".")[0])
+    print(f"Will train (all/some) parameters of {to_trains}.")
+
+    return model
+
+
 def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
     hypergraph_model = args.generate_graph_from_hyperedges
     common_kwargs = dict(
@@ -798,6 +860,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         hypergraph_model = hypergraph_model or hmodel
         dataset_kwargs = {"use_edge_attr": model_kwargs["use_edge_attr"]}
         model = DecentralPlannerGATNet(**common_kwargs, **model_kwargs).to(device)
+        model.reset_parameters()
     elif args.agent_network_type == "parallel" or args.agent_network_type == "series":
         model1_kwargs, hmodel1 = _decode_args(dict_args)
         model2_kwargs, hmodel2 = _decode_args(dict_args, "model2_")
@@ -835,6 +898,10 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
             gnn2_kwargs=model2_kwargs,
             parallel_or_series=args.agent_network_type,
         ).to(device)
+        model.reset_parameters()
     else:
         raise ValueError(f"Unsupported agent network type {args.agent_network_type}.")
+    if args.load_partial_parameters_path is not None:
+        # Loading parameters
+        model = load_and_freeze_parameters(model, args, device)
     return model, hypergraph_model, dataset_kwargs

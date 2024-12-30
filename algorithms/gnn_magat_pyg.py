@@ -1675,6 +1675,7 @@ class BaseHypergraph(torch.nn.Module):
     ):
         super().__init__()
 
+        self.conv = None
         self.bipartite_hyperedge_feature_generator = False
         if hyperedge_feature_generator == "gcn":
             self.hyperedge_feature_generator = GCNConv(
@@ -1719,6 +1720,10 @@ class BaseHypergraph(torch.nn.Module):
         else:
             hyperedge_attr = self.hyperedge_feature_generator(x, edge_index)
         return hyperedge_attr
+
+    def reset_parameters(self):
+        self.conv.reset_parameters()
+        self.hyperedge_feature_generator.reset_parameters()
 
     def forward(self, x, edge_index):
         raise NotImplementedError

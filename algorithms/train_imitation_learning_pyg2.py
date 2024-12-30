@@ -74,6 +74,10 @@ def add_training_args(parser):
     )
     parser.add_argument("--model2_hyperedge_feature_generator", type=str, default="gcn")
 
+    parser.add_argument("--load_partial_parameters_path", type=str, default=None)
+    parser.add_argument("--replace_model", type=str, default=None)
+    parser.add_argument("--parameters_to_freeze", type=str, default=None)
+
     parser.add_argument("--lr_start", type=float, default=1e-3)
     parser.add_argument("--lr_end", type=float, default=1e-6)
     parser.add_argument("--num_epochs", type=int, default=300)
