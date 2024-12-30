@@ -107,6 +107,9 @@ def add_training_args(parser):
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
     parser.add_argument("--num_run_oe", type=int, default=500)
     parser.add_argument("--run_oe_after", type=int, default=0)
+    parser.add_argument(
+        "--recursive_oe", action=argparse.BooleanOptionalAction, default=False
+    )
 
     parser.add_argument(
         "--load_positions_separately",
@@ -277,6 +280,7 @@ def main():
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
 
     oe_graph_dataset = None
+    oe_grid_configs = []
     oe_hypergraph_indices = []
 
     def multiprocess_run_expert(
@@ -469,17 +473,26 @@ def main():
                 print("Running Online Expert")
 
                 rng = np.random.default_rng(args.dataset_seed + epoch + 1)
-                oe_ids = rng.integers(train_id_max, size=args.num_run_oe)
+                if args.recursive_oe:
+                    oe_ids = rng.integers(
+                        train_id_max + len(oe_grid_configs), size=args.num_run_oe
+                    )
+                else:
+                    oe_ids = rng.integers(train_id_max, size=args.num_run_oe)
 
                 oe_dataset = []
                 oe_hindices = []
 
                 for i, graph_id in enumerate(oe_ids):
                     print(f"Running model on {i}/{args.num_run_oe} ", end="")
+                    if graph_id > train_id_max:
+                        grid_config = oe_grid_configs[graph_id - train_id_max]
+                    else:
+                        grid_config = _grid_config_generator(seeds[graph_id])
                     success, env, observations = run_model_on_grid(
                         model=model,
                         device=device,
-                        grid_config=_grid_config_generator(seeds[graph_id]),
+                        grid_config=grid_config,
                         args=args,
                         dataset_kwargs=dataset_kwargs,
                         hypergraph_model=hypergraph_model,
@@ -542,6 +555,7 @@ def main():
                                     (all_observations, all_actions, all_terminated)
                                 )
                                 oe_hindices.extend(hindices)
+                                oe_grid_configs.append(grid_config)
                             else:
                                 print(f"-- Fail")
                         else:
@@ -566,6 +580,7 @@ def main():
                         )
                     oe_dataset.append((all_observations, all_actions, all_terminated))
                     oe_hindices.extend(hindices)
+                    oe_grid_configs.append(grid_config)
 
                 if len(oe_dataset) > 0:
                     print(f"Adding {len(oe_dataset)} OE grids to the dataset")
