@@ -4,7 +4,7 @@ import pathlib
 import numpy as np
 import wandb
 
-from multiprocessing import Process, Queue
+import multiprocessing as mp
 from itertools import compress
 
 from pogema import GridConfig
@@ -307,7 +307,7 @@ def main():
             generate_graph=args.generate_graph_from_hyperedges,
         )
 
-    queue = Queue()
+    queue = mp.Queue()
 
     print("Starting Training....")
     for epoch in range(args.num_epochs):
@@ -506,7 +506,7 @@ def main():
                         )
                         grid_config = generate_grid_config_from_env(env)
 
-                        p = Process(
+                        p = mp.Process(
                             target=multiprocess_run_expert,
                             args=(
                                 queue,
@@ -610,4 +610,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method('forkserver')  # TODO: Maybe add this as an cmd line option
     main()
