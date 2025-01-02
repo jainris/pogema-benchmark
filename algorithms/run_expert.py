@@ -6,6 +6,7 @@ import numpy as np
 from pogema import pogema_v0, GridConfig
 
 from lacam.inference import LacamInference, LacamInferenceConfig
+from dcc.inference import DCCInference, DCCInferenceConfig
 
 DATASET_FILE_NAME_DEFAULT = {
     "expert_algorithm": "LaCAM",
@@ -48,6 +49,18 @@ def add_expert_dataset_args(parser):
     )
 
     return parser
+
+
+def get_expert_algorithm_and_config(args):
+    if args.expert_algorithm == "LaCAM":
+        inference_config = LacamInferenceConfig()
+        expert_algorithm = LacamInference
+    elif args.expert_algorithm == "DCC":
+        inference_config = DCCInferenceConfig()
+        expert_algorithm = DCCInference
+    else:
+        raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
+    return expert_algorithm, inference_config
 
 
 def run_expert_algorithm(
@@ -131,11 +144,7 @@ def main():
     else:
         raise ValueError(f"Unsupported map type: {args.map_type}.")
 
-    if args.expert_algorithm == "LaCAM":
-        inference_config = LacamInferenceConfig()
-        expert_algorithm = LacamInference
-    else:
-        raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
+    expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
     dataset = []
     seed_mask = []

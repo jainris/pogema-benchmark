@@ -9,8 +9,6 @@ from itertools import compress
 
 from pogema import GridConfig
 
-from lacam.inference import LacamInference, LacamInferenceConfig
-
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -28,7 +26,11 @@ from generate_hypergraphs import (
     get_hypergraph_file_name,
 )
 from generate_pos import get_pos_file_name
-from run_expert import run_expert_algorithm, add_expert_dataset_args
+from run_expert import (
+    get_expert_algorithm_and_config,
+    run_expert_algorithm,
+    add_expert_dataset_args,
+)
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 
 from agents import run_model_on_grid, get_model
@@ -192,11 +194,7 @@ def main():
     else:
         raise ValueError(f"Unsupported map type: {args.map_type}.")
 
-    if args.expert_algorithm == "LaCAM":
-        inference_config = LacamInferenceConfig()
-        expert_algorithm = LacamInference
-    else:
-        raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
+    expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
     torch.manual_seed(args.model_seed)
     model, hypergraph_model, dataset_kwargs = get_model(args, device)
