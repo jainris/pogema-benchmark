@@ -9,8 +9,6 @@ import multiprocessing as mp
 
 from pogema import pogema_v0, GridConfig
 
-from lacam.inference import LacamInference, LacamInferenceConfig
-
 sys.path.append("./magat_pathplanning")
 
 import torch
@@ -28,6 +26,7 @@ from run_expert import (
     DATASET_FILE_NAME_KEYS,
     run_expert_algorithm,
     add_expert_dataset_args,
+    get_expert_algorithm_and_config,
 )
 
 
@@ -558,11 +557,7 @@ def main():
     else:
         raise ValueError(f"Unsupported map type: {args.map_type}.")
 
-    if args.expert_algorithm == "LaCAM":
-        inference_config = LacamInferenceConfig()
-        expert_algorithm = LacamInference
-    else:
-        raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
+    expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
     if args.imitation_learning_model == "MAGAT":
         model = DecentralPlannerGATNet(
