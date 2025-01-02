@@ -78,6 +78,7 @@ def add_training_args(parser):
 
     parser.add_argument("--load_partial_parameters_path", type=str, default=None)
     parser.add_argument("--replace_model", type=str, default=None)
+    parser.add_argument("--parameters_to_load", type=str, default="all")
     parser.add_argument("--parameters_to_freeze", type=str, default=None)
 
     parser.add_argument("--lr_start", type=float, default=1e-3)

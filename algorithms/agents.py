@@ -784,18 +784,34 @@ def update_partial_state_dict(
     old_key_name="gnns",
     new_key_name="gnns1",
     check_and_update_legacy_model=True,
+    parameters_to_load="all",
 ):
+    if (parameters_to_load is None) or (parameters_to_load == "none"):
+        parameters_to_load = []
+    elif parameters_to_load != "all":
+        parameters_to_load = parameters_to_load.split("+")
+
     new_state_dict = OrderedDict()
     for key in state_dict.keys():
-        k2 = key.split(".")
-        if k2[0] == old_key_name:
-            if check_and_update_legacy_model and (k2[2] != "gnn"):
-                k2[1] = f"{k2[1]}.gnn"
-            if new_key_name is not None:
-                k2[0] = new_key_name
-            new_state_dict[".".join(k2)] = state_dict[key]
+        to_keep = False
+        if parameters_to_load == "all":
+            to_keep = True
         else:
-            new_state_dict[key] = state_dict[key]
+            for par in parameters_to_load:
+                if par == key[: len(par)]:
+                    to_keep = True
+                    break
+
+        if to_keep:
+            k2 = key.split(".")
+            if k2[0] == old_key_name:
+                if check_and_update_legacy_model and (k2[2] != "gnn"):
+                    k2[1] = f"{k2[1]}.gnn"
+                if new_key_name is not None:
+                    k2[0] = new_key_name
+                new_state_dict[".".join(k2)] = state_dict[key]
+            else:
+                new_state_dict[key] = state_dict[key]
     return new_state_dict
 
 
@@ -817,7 +833,11 @@ def get_parameters_to_freeze(state_dict, config):
 
 def load_and_freeze_parameters(model, args, device):
     state_dict = torch.load(args.load_partial_parameters_path, map_location=device)
-    state_dict = update_partial_state_dict(state_dict, new_key_name=args.replace_model)
+    state_dict = update_partial_state_dict(
+        state_dict,
+        new_key_name=args.replace_model,
+        parameters_to_load=args.parameters_to_load,
+    )
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
     assert (
