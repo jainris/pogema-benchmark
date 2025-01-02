@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import wandb
 
-from multiprocessing import Process, Queue
+import multiprocessing as mp
 
 from pogema import pogema_v0, GridConfig
 
@@ -64,6 +64,15 @@ def add_training_args(parser):
     parser.add_argument("--threshold_val_success_rate", type=float, default=0.9)
     parser.add_argument("--num_run_oe", type=int, default=500)
     parser.add_argument("--run_oe_after", type=int, default=0)
+
+    parser.add_argument(
+        "--recursive_oe", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--run_expert_in_separate_fork",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
 
     return parser
 
@@ -483,6 +492,24 @@ def run_model_on_grid(
     return all(terminated), env, observations
 
 
+def generate_grid_config_from_env(env):
+    config = env.grid.config
+    return GridConfig(
+        num_agents=config.num_agents,  # number of agents
+        size=config.size,  # size of the grid
+        density=config.density,  # obstacle density
+        seed=config.seed,
+        max_episode_steps=config.max_episode_steps,  # horizon
+        obs_radius=config.obs_radius,  # defines field of view
+        observation_type=config.observation_type,
+        collision_system=config.collision_system,
+        on_target=config.on_target,
+        map=env.grid.get_obstacles(ignore_borders=True).tolist(),
+        agents_xy=env.grid.get_agents_xy(ignore_borders=True),
+        targets_xy=env.grid.get_targets_xy(ignore_borders=True),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
     parser = add_expert_dataset_args(parser)
@@ -610,19 +637,24 @@ def main():
     cur_validation_id_max = min(train_id_max + args.initial_val_size, validation_id_max)
 
     oe_graph_dataset = None
+    oe_grid_configs = []
 
     def multiprocess_run_expert(
-        queue, expert, env, observations, save_termination_state
+        queue,
+        expert,
+        grid_config,
+        save_termination_state,
+        additional_data_func=None,
     ):
-        all_actions, all_observations, all_terminated = run_expert_algorithm(
+        expert_results = run_expert_algorithm(
             expert,
-            env=env,
-            observations=observations,
+            grid_config=grid_config,
             save_termination_state=save_termination_state,
+            additional_data_func=additional_data_func,
         )
-        queue.put((all_actions, all_observations, all_terminated))
+        queue.put((*expert_results, grid_config))
 
-    queue = Queue()
+    queue = mp.Queue()
 
     for epoch in range(args.num_epochs):
         total_loss = 0.0
@@ -784,70 +816,99 @@ def main():
                 print("Running Online Expert")
 
                 rng = np.random.default_rng(args.dataset_seed + epoch + 1)
-                oe_ids = rng.integers(train_id_max, size=args.num_run_oe)
+                if args.recursive_oe:
+                    oe_ids = rng.integers(
+                        train_id_max + len(oe_grid_configs), size=args.num_run_oe
+                    )
+                else:
+                    oe_ids = rng.integers(train_id_max, size=args.num_run_oe)
 
                 oe_dataset = []
 
                 for graph_id in oe_ids:
-                    grid_config = GridConfig(
-                        num_agents=num_agents,  # number of agents
-                        size=args.map_w,  # size of the grid
-                        density=args.obstacle_density,  # obstacle density
-                        seed=seeds[graph_id],  # set to None for random
-                        # obstacles, agents and targets
-                        # positions at each reset
-                        max_episode_steps=2 * args.max_episode_steps,  # horizon
-                        obs_radius=args.obs_radius,  # defines field of view
-                        observation_type="MAPF",
-                        collision_system=args.collision_system,
-                        on_target=args.on_target,
-                    )
+                    if graph_id > train_id_max:
+                        grid_config = oe_grid_configs[graph_id - train_id_max]
+                    else:
+                        grid_config = GridConfig(
+                            num_agents=num_agents,  # number of agents
+                            size=args.map_w,  # size of the grid
+                            density=args.obstacle_density,  # obstacle density
+                            seed=seeds[graph_id],  # set to None for random
+                            # obstacles, agents and targets
+                            # positions at each reset
+                            max_episode_steps=args.max_episode_steps,  # horizon
+                            obs_radius=args.obs_radius,  # defines field of view
+                            observation_type="MAPF",
+                            collision_system=args.collision_system,
+                            on_target=args.on_target,
+                        )
                     success, env, observations = run_model_on_grid(
                         model,
                         args.comm_radius,
                         args.obs_radius,
-                        grid_configs[graph_id],
+                        grid_config,
                         device,
-                        args.max_episode_steps,
                     )
 
                     if not success:
                         expert = expert_algorithm(inference_config)
 
-                        p = Process(
-                            target=multiprocess_run_expert,
-                            args=(
-                                queue,
-                                expert,
-                                env,
-                                observations,
-                                args.save_termination_state,
-                            ),
-                        )
-                        p.start()
+                        grid_config = generate_grid_config_from_env(env)
 
                         all_actions, all_observations, all_terminated = None, None, None
-                        while True:
-                            try:
-                                all_actions, all_observations, all_terminated = (
-                                    queue.get(timeout=3)
-                                )
-                                p.join()
-                                break
-                            except:
-                                p.join(timeout=0.5)
-                                if p.exitcode is not None:
+                        if args.run_expert_in_separate_fork:
+                            p = mp.Process(
+                                target=multiprocess_run_expert,
+                                args=(
+                                    queue,
+                                    expert,
+                                    grid_config,
+                                    args.save_termination_state,
+                                ),
+                            )
+                            p.start()
+
+                            while p.is_alive():
+                                try:
+                                    (
+                                        all_actions,
+                                        all_observations,
+                                        all_terminated,
+                                        grid_config,
+                                    ) = queue.get(timeout=3)
+                                    p.join()
                                     break
+                                except:
+                                    p.join(timeout=0.5)
+                                    if p.exitcode is not None:
+                                        break
+                        else:
+                            multiprocess_run_expert(
+                                queue,
+                                expert,
+                                grid_config,
+                                args.save_termination_state,
+                            )
+                            (
+                                all_actions,
+                                all_observations,
+                                all_terminated,
+                                grid_config,
+                            ) = queue.get()
 
                         if all_actions is not None:
                             if all(all_terminated[-1]):
                                 oe_dataset.append(
                                     (all_observations, all_actions, all_terminated)
                                 )
+                                oe_grid_configs.append(grid_config)
                 while queue.qsize() > 0:
                     # Popping remaining elements, although no elements should remain
-                    all_actions, all_observations, all_terminated = queue.get()
+                    all_actions, all_observations, all_terminated, grid_config = (
+                        queue.get()
+                    )
                     oe_dataset.append((all_observations, all_actions, all_terminated))
+                    oe_grid_configs.append(grid_config)
 
                 if len(oe_dataset) > 0:
                     print(f"Adding {len(oe_dataset)} OE grids to the dataset")
@@ -878,4 +939,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method("fork")  # TODO: Maybe add this as an cmd line option
     main()
