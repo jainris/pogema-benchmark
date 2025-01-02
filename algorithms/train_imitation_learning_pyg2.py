@@ -123,6 +123,11 @@ def add_training_args(parser):
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    parser.add_argument(
+        "--run_expert_in_separate_fork",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
 
     return parser
 
@@ -506,30 +511,44 @@ def main():
                         )
                         grid_config = generate_grid_config_from_env(env)
 
-                        p = mp.Process(
-                            target=multiprocess_run_expert,
-                            args=(
+                        if args.run_expert_in_separate_fork:
+                            p = mp.Process(
+                                target=multiprocess_run_expert,
+                                args=(
+                                    queue,
+                                    expert,
+                                    grid_config,
+                                    args.save_termination_state,
+                                    additional_data_func,
+                                ),
+                            )
+                            p.start()
+
+                            all_actions, all_observations, all_terminated = (
+                                None,
+                                None,
+                                None,
+                            )
+                            expert_results = None
+                            hindices = []
+                            while p.is_alive():
+                                try:
+                                    expert_results = queue.get(timeout=3)
+                                    p.join()
+                                    break
+                                except:
+                                    p.join(timeout=0.5)
+                                    if p.exitcode is not None:
+                                        break
+                        else:
+                            multiprocess_run_expert(
                                 queue,
                                 expert,
                                 grid_config,
                                 args.save_termination_state,
                                 additional_data_func,
-                            ),
-                        )
-                        p.start()
-
-                        all_actions, all_observations, all_terminated = None, None, None
-                        expert_results = None
-                        hindices = []
-                        while True:
-                            try:
-                                expert_results = queue.get(timeout=3)
-                                p.join()
-                                break
-                            except:
-                                p.join(timeout=0.5)
-                                if p.exitcode is not None:
-                                    break
+                            )
+                            expert_results = queue.get()
 
                         if expert_results is not None:
                             if hypergraph_model:
@@ -610,5 +629,5 @@ def main():
 
 
 if __name__ == "__main__":
-    mp.set_start_method('fork')  # TODO: Maybe add this as an cmd line option
+    mp.set_start_method("fork")  # TODO: Maybe add this as an cmd line option
     main()
