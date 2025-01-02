@@ -610,5 +610,5 @@ def main():
 
 
 if __name__ == "__main__":
-    mp.set_start_method('forkserver')  # TODO: Maybe add this as an cmd line option
+    mp.set_start_method('fork')  # TODO: Maybe add this as an cmd line option
     main()

@@ -67,7 +67,7 @@ class DCCInference:
         self.positions = None
         self.h_map = None
         self.agent = Network()
-        state_dict = torch.load(self.cfg.path_to_weights)
+        state_dict = torch.load(self.cfg.path_to_weights, map_location=self.cfg.device)
         self.agent.load_state_dict(state_dict)
         self.agent.to(self.cfg.device)
         self.agent.eval()
