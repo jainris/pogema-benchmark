@@ -511,6 +511,14 @@ def main():
                         )
                         grid_config = generate_grid_config_from_env(env)
 
+                        all_actions, all_observations, all_terminated = (
+                            None,
+                            None,
+                            None,
+                        )
+                        expert_results = None
+                        hindices = []
+
                         if args.run_expert_in_separate_fork:
                             p = mp.Process(
                                 target=multiprocess_run_expert,
@@ -524,13 +532,6 @@ def main():
                             )
                             p.start()
 
-                            all_actions, all_observations, all_terminated = (
-                                None,
-                                None,
-                                None,
-                            )
-                            expert_results = None
-                            hindices = []
                             while p.is_alive():
                                 try:
                                     expert_results = queue.get(timeout=3)
