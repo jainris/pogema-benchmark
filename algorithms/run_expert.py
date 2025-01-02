@@ -80,6 +80,8 @@ def run_expert_algorithm(
     all_terminated = []
     additional_data = []
 
+    expert.reset_states()
+
     while True:
         actions = expert.act(observations)
 
