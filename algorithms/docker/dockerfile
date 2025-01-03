@@ -21,7 +21,8 @@ RUN apt update && apt install -y \
     g++ \
     wget \
     libboost-all-dev \
-    gdb
+    gdb \
+    libyaml-cpp-dev
 
 RUN pip install torch_geometric \
     && pip install pyg_lib==0.4.0 torch-scatter==2.1.1 torch_sparse==0.6.17 torch_spline_conv==1.2.2 torch_cluster==1.6.1 -f https://pytorch-geometric.com/whl/torch-1.13.1+cu116.html

@@ -5,9 +5,6 @@ import numpy as np
 
 from pogema import pogema_v0, GridConfig
 
-from lacam.inference import LacamInference, LacamInferenceConfig
-from dcc.inference import DCCInference, DCCInferenceConfig
-
 DATASET_FILE_NAME_DEFAULT = {
     "expert_algorithm": "LaCAM",
     "map_type": "RandomGrid",
@@ -51,13 +48,40 @@ def add_expert_dataset_args(parser):
     return parser
 
 
+class ExpertWrapper:
+    def __init__(self, base_obj):
+        self.base_obj = base_obj
+
+    def reset_states(self, env):
+        self.base_obj.reset_states()
+
+    def __getattr__(self, name):
+        return getattr(self.base_obj, name)
+
+
+def wrapped_class(cls):
+    def _get_wrapped_class(config):
+        return ExpertWrapper(cls(config))
+
+    return _get_wrapped_class
+
+
 def get_expert_algorithm_and_config(args):
     if args.expert_algorithm == "LaCAM":
+        from lacam.inference import LacamInference, LacamInferenceConfig
+
         inference_config = LacamInferenceConfig()
-        expert_algorithm = LacamInference
+        expert_algorithm = wrapped_class(LacamInference)
     elif args.expert_algorithm == "DCC":
+        from dcc.inference import DCCInference, DCCInferenceConfig
+
         inference_config = DCCInferenceConfig()
-        expert_algorithm = DCCInference
+        expert_algorithm = wrapped_class(DCCInference)
+    elif args.expert_algorithm == "ECBS":
+        from ecbs.inference import ECBSInference, ECBSInferenceConfig
+
+        inference_config = ECBSInferenceConfig()
+        expert_algorithm = ECBSInference
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
     return expert_algorithm, inference_config
@@ -80,7 +104,7 @@ def run_expert_algorithm(
     all_terminated = []
     additional_data = []
 
-    expert.reset_states()
+    expert.reset_states(env)
 
     while True:
         actions = expert.act(observations)
