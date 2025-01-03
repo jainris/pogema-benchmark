@@ -32,7 +32,7 @@ class ECBSInferenceConfig(AlgoBase):
     suboptimality: float = 1.0
     disappear_at_goal: bool = False
     tmp_dir: str = DEFAULT_TMP
-    timeout: float = 10.0
+    timeout: float = 60.0
 
 
 class ECBSLib:
@@ -94,13 +94,16 @@ class ECBSLib:
         if self.config.disappear_at_goal:
             ecbs_command.append("--disappear-at-goal")
 
-        subprocess.run(
-            ecbs_command,
-            check=True,
-            cwd=calling_script_dir,
-            timeout=self.config.timeout,
-            stdout=subprocess.DEVNULL,
-        )
+        try:
+            subprocess.run(
+                ecbs_command,
+                check=True,
+                cwd=calling_script_dir,
+                timeout=self.config.timeout,
+                stdout=subprocess.DEVNULL,
+            )
+        except TimeoutError:
+            return None
 
         return self.parse_output()
 
@@ -114,9 +117,11 @@ class ECBSInference:
         self.env = env
         if env is not None:
             self.MOVES = np.array(self.env.grid_config.MOVES)
+        self.timed_out = False
 
     def reset_states(self, env=None):
         self.step = 1
+        self.timed_out = False
         if env is not None:
             self.env = env
             self.MOVES = np.array(self.env.grid_config.MOVES)
@@ -154,7 +159,14 @@ class ECBSInference:
         self, observations=None, rewards=None, dones=None, info=None, skip_agents=None
     ):
         if self.output_data is None:
-            self.output_data = self.ecbs_lib.run_ecbs(self.env)
+            if not self.timed_out:
+                self.output_data = self.ecbs_lib.run_ecbs(self.env)
+                if self.output_data is None:
+                    self.timed_out = True
+                    return [0] * self.env.grid_config.num_agents
+            else:
+                # If timed out, then just waiting (maybe change to something else?)
+                return [0] * self.env.grid_config.num_agents
         actions = self._get_next_move(self.step)
         self.step += 1
         return actions
