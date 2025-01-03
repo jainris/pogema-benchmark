@@ -102,7 +102,7 @@ class ECBSLib:
                 timeout=self.config.timeout,
                 stdout=subprocess.DEVNULL,
             )
-        except TimeoutError:
+        except subprocess.TimeoutExpired:
             return None
 
         return self.parse_output()
