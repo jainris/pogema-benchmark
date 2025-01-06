@@ -21,9 +21,11 @@ import utils.graphUtils.graphTools
 from torchsummaryX import summary
 from graphs.models.resnet_pytorch import *
 
-from convert_to_imitation_dataset import generate_graph_dataset
+from convert_to_imitation_dataset import (
+    generate_graph_dataset,
+    get_imitation_dataset_file_name,
+)
 from run_expert import (
-    DATASET_FILE_NAME_KEYS,
     run_expert_algorithm,
     add_expert_dataset_args,
     get_expert_algorithm_and_config,
@@ -559,11 +561,7 @@ def main():
         optimizer, T_max=args.num_epochs, eta_min=args.lr_end
     )
 
-    file_name = ""
-    dict_args = vars(args)
-    for key in sorted(DATASET_FILE_NAME_KEYS):
-        file_name += f"_{key}_{dict_args[key]}"
-    file_name = file_name[1:] + ".pkl"
+    file_name = get_imitation_dataset_file_name(args)
     path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
 
     with open(path, "rb") as f:
