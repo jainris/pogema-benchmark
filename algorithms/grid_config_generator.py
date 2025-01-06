@@ -114,7 +114,7 @@ def generate_random_grid_with_min_dist(
 
         start_positions = []
         target_positions = []
-        for start_x, start_y, target_x, target_y in possible_pairs:
+        for start_x, start_y, target_x, target_y in possible_pairs.tolist():
             start_pos = [start_x, start_y]
             target_pos = [target_x, target_y]
             if (
