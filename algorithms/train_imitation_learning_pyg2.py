@@ -34,6 +34,10 @@ from run_expert import (
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 
 from agents import run_model_on_grid, get_model
+from grid_config_generator import (
+    grid_config_generator_factory,
+    generate_grid_config_from_env,
+)
 
 
 def add_training_args(parser):
@@ -133,24 +137,6 @@ def add_training_args(parser):
     return parser
 
 
-def generate_grid_config_from_env(env):
-    config = env.grid.config
-    return GridConfig(
-        num_agents=config.num_agents,  # number of agents
-        size=config.size,  # size of the grid
-        density=config.density,  # obstacle density
-        seed=config.seed,
-        max_episode_steps=config.max_episode_steps,  # horizon
-        obs_radius=config.obs_radius,  # defines field of view
-        observation_type=config.observation_type,
-        collision_system=config.collision_system,
-        on_target=config.on_target,
-        map=env.grid.get_obstacles(ignore_borders=True).tolist(),
-        agents_xy=env.grid.get_agents_xy(ignore_borders=True),
-        targets_xy=env.grid.get_targets_xy(ignore_borders=True),
-    )
-
-
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
     parser = add_expert_dataset_args(parser)
@@ -172,33 +158,22 @@ def main():
 
     num_agents = int(args.robot_density * args.map_h * args.map_w)
 
-    if args.map_type == "RandomGrid":
-        assert args.map_h == args.map_w, (
-            f"Expect height and width of random grid to be the same, "
-            f"but got height {args.map_h} and width {args.map_w}"
-        )
+    rng = np.random.default_rng(args.dataset_seed)
+    seeds = rng.integers(10**10, size=args.num_samples)
 
-        rng = np.random.default_rng(args.dataset_seed)
-        seeds = rng.integers(10**10, size=args.num_samples)
+    _grid_config_generator = grid_config_generator_factory(
+        map_type=args.map_type,
+        map_w=args.map_w,
+        map_h=args.map_h,
+        num_agents=num_agents,
+        obstacle_density=args.obstacle_density,
+        obs_radius=args.obs_radius,
+        collision_system=args.collition_system,
+        on_target=args.on_target,
+        max_episode_steps=args.max_episode_steps,
+    )
 
-        def _grid_config_generator(seed):
-            return GridConfig(
-                num_agents=num_agents,  # number of agents
-                size=args.map_w,  # size of the grid
-                density=args.obstacle_density,  # obstacle density
-                seed=seed,  # set to None for random
-                # obstacles, agents and targets
-                # positions at each reset
-                max_episode_steps=args.max_episode_steps,  # horizon
-                obs_radius=args.obs_radius,  # defines field of view
-                observation_type="MAPF",
-                collision_system=args.collision_system,
-                on_target=args.on_target,
-            )
-
-        grid_config = _grid_config_generator(seeds[0])
-    else:
-        raise ValueError(f"Unsupported map type: {args.map_type}.")
+    grid_config = _grid_config_generator(seeds[0])
 
     expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
