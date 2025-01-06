@@ -170,6 +170,7 @@ def main():
         obs_radius=args.obs_radius,
         collision_system=args.collition_system,
         on_target=args.on_target,
+        min_dist=args.min_dist,
         max_episode_steps=args.max_episode_steps,
     )
 

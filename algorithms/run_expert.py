@@ -21,6 +21,7 @@ DATASET_FILE_NAME_DEFAULT = {
     "save_termination_state": True,
     "collision_system": "soft",
     "on_target": "nothing",
+    "min_dist": None,
 }
 
 DATASET_FILE_NAME_KEYS = list(DATASET_FILE_NAME_DEFAULT.keys())
@@ -40,6 +41,17 @@ def add_expert_dataset_args(parser):
     )
 
     return parser
+
+
+def get_expert_dataset_file_name(args):
+    file_name = ""
+    dict_args = vars(args)
+    for key in sorted(DATASET_FILE_NAME_KEYS):
+        if (key == "min_dist") and (dict_args[key] is None):
+            continue
+        file_name += f"_{key}_{dict_args[key]}"
+    file_name = file_name[1:] + ".pkl"
+    return file_name
 
 
 class ExpertWrapper:
@@ -147,6 +159,7 @@ def main():
         obs_radius=args.obs_radius,
         collision_system=args.collition_system,
         on_target=args.on_target,
+        min_dist=args.min_dist,
         max_episode_steps=args.max_episode_steps,
     )
 
@@ -186,12 +199,7 @@ def main():
         f"{len(dataset)}/{len(grid_configs)} samples were successfully added to the dataset"
     )
 
-    file_name = ""
-    dict_args = vars(args)
-    for key in sorted(DATASET_FILE_NAME_KEYS):
-        file_name += f"_{key}_{dict_args[key]}"
-    file_name = file_name[1:] + ".pkl"
-
+    file_name = get_expert_dataset_file_name(args)
     path = pathlib.Path(f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}")
 
     path.parent.mkdir(parents=True, exist_ok=True)
