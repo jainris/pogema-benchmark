@@ -533,11 +533,6 @@ def main():
         max_episode_steps=args.max_episode_steps,
     )
 
-    grid_configs = []
-
-    for seed in seeds:
-        grid_configs.append(_grid_config_generator(seed))
-
     expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
     if args.imitation_learning_model == "MAGAT":
@@ -750,7 +745,7 @@ def main():
                     model,
                     args.comm_radius,
                     args.obs_radius,
-                    grid_configs[graph_id],
+                    _grid_config_generator(seeds[graph_id]),
                     device,
                 )
 

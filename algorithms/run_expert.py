@@ -157,23 +157,19 @@ def main():
         num_agents=num_agents,
         obstacle_density=args.obstacle_density,
         obs_radius=args.obs_radius,
-        collision_system=args.collition_system,
+        collision_system=args.collision_system,
         on_target=args.on_target,
         min_dist=args.min_dist,
         max_episode_steps=args.max_episode_steps,
     )
-
-    grid_configs = []
-
-    for seed in seeds:
-        grid_configs.append(_grid_config_generator(seed))
 
     expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
     dataset = []
     seed_mask = []
     num_success = 0
-    for i, grid_config in enumerate(grid_configs):
+    for i, seed in enumerate(seeds):
+        grid_config = _grid_config_generator(seed)
         print(f"Running expert on map {i + 1}/{args.num_samples}", end=" ")
         expert = expert_algorithm(inference_config)
 
