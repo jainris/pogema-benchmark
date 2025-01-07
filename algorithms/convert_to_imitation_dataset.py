@@ -22,12 +22,13 @@ def get_imitation_dataset_file_name(args):
     file_name = ""
     dict_args = vars(args)
     load_positions_separately = dict_args.get("load_positions_separately", False)
+    use_edge_attr = dict_args.get("use_edge_attr", False)
 
     for key in sorted(DATASET_FILE_NAME_KEYS):
         if (key == "min_dist") and (dict_args[key] is None):
             continue
         file_name += f"_{key}_{dict_args[key]}"
-    if (not load_positions_separately) and args.use_edge_attr:
+    if (not load_positions_separately) and use_edge_attr:
         file_name += "_pos"
     file_name = file_name[1:] + ".pkl"
     return file_name
