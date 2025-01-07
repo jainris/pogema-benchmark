@@ -168,7 +168,7 @@ def main():
         num_agents=num_agents,
         obstacle_density=args.obstacle_density,
         obs_radius=args.obs_radius,
-        collision_system=args.collition_system,
+        collision_system=args.collision_system,
         on_target=args.on_target,
         min_dist=args.min_dist,
         max_episode_steps=args.max_episode_steps,
