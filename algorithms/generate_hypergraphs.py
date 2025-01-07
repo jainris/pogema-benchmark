@@ -10,6 +10,7 @@ from scipy.spatial.distance import squareform, pdist
 from run_expert import (
     DATASET_FILE_NAME_KEYS,
     DATASET_FILE_NAME_DEFAULT,
+    get_expert_dataset_file_name,
     add_expert_dataset_args,
 )
 
@@ -216,12 +217,7 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    file_name = ""
-    dict_args = vars(args)
-    for key in sorted(DATASET_FILE_NAME_KEYS):
-        file_name += f"_{key}_{dict_args[key]}"
-    file_name = file_name[1:] + ".pkl"
-
+    file_name = get_expert_dataset_file_name(args)
     path = pathlib.Path(f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}")
 
     path.parent.mkdir(parents=True, exist_ok=True)
