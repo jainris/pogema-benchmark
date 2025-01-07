@@ -88,6 +88,11 @@ def get_expert_algorithm_and_config(args):
 
         inference_config = ECBSInferenceConfig()
         expert_algorithm = ECBSInference
+    elif args.expert_algorithm == "PIBT":
+        from pibt.inference import PIBTInference, PIBTInferenceConfig
+
+        inference_config = PIBTInferenceConfig()
+        expert_algorithm = PIBTInference
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
     return expert_algorithm, inference_config
