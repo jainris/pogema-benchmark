@@ -192,7 +192,7 @@ def main():
         print(f"-- Success Rate: {num_success / (i + 1)}")
 
     print(
-        f"{len(dataset)}/{len(grid_configs)} samples were successfully added to the dataset"
+        f"{len(dataset)}/{len(seeds)} samples were successfully added to the dataset"
     )
 
     file_name = get_expert_dataset_file_name(args)
