@@ -83,6 +83,7 @@ def add_training_args(parser):
         "--normalize_adjacency", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument("--cnn_mode", type=str, default="basic-CNN")
+    parser.add_argument("--attention_mode", type=str, default="GAT_modified")
 
     return parser
 
@@ -559,7 +560,7 @@ def main():
             nAttentionHeads=args.num_attention_heads,
             use_dropout=True,
             CNN_mode=args.cnn_mode,
-            attentionMode="GAT_modified",
+            attentionMode=args.attention_mode,
             AttentionConcat=True,
         ).to(device)
     else:
