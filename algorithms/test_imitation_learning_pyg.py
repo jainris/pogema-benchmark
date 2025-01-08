@@ -17,6 +17,7 @@ from convert_to_imitation_dataset import add_imitation_dataset_args
 from generate_hypergraphs import add_hypergraph_generation_args
 from agents import run_model_on_grid, get_model
 from test_expert import get_expert_file_name, EXPERT_FILE_NAME_KEYS
+from grid_config_generator import grid_config_generator_factory
 
 
 def load_from_legacy_state_dict(state_dict):
@@ -66,6 +67,7 @@ def main():
     parser.add_argument(
         "--test_wrt_expert", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument("--test_min_dist", type=int, default=None)
 
     args = parser.parse_args()
     print(args)
@@ -110,115 +112,51 @@ def main():
 
     if args.test_in_distribution:
         num_agents = int(args.robot_density * args.map_h * args.map_w)
-        comm_radius = args.comm_radius
-        obs_radius = args.obs_radius
 
-        if args.map_type == "RandomGrid":
-            assert args.map_h == args.map_w, (
-                f"Expect height and width of random grid to be the same, "
-                f"but got height {args.map_h} and width {args.map_w}"
-            )
+        train_id_max = int(
+            args.num_samples * (1 - args.validation_fraction - args.test_fraction)
+        )
+        validation_id_max = train_id_max + int(
+            args.num_samples * args.validation_fraction
+        )
 
-            train_id_max = int(
-                args.num_samples * (1 - args.validation_fraction - args.test_fraction)
-            )
-            validation_id_max = train_id_max + int(
-                args.num_samples * args.validation_fraction
-            )
-
-            rng = np.random.default_rng(args.dataset_seed)
-            seeds = rng.integers(10**10, size=args.num_samples)
-            if args.get_validation_results:
-                seeds = seeds[train_id_max:validation_id_max]
-            else:
-                seeds = seeds[validation_id_max:]
-
-            if args.test_wrt_expert:
-
-                def _grid_config_generator(seed, makespan):
-                    return GridConfig(
-                        num_agents=num_agents,  # number of agents
-                        size=args.map_w,  # size of the grid
-                        density=args.obstacle_density,  # obstacle density
-                        seed=seed,  # set to None for random
-                        # obstacles, agents and targets
-                        # positions at each reset
-                        max_episode_steps=3 * makespan,  # horizon
-                        obs_radius=args.obs_radius,  # defines field of view
-                        observation_type="MAPF",
-                        collision_system=args.collision_system,
-                        on_target=args.on_target,
-                    )
-
-            else:
-
-                def _grid_config_generator(seed):
-                    return GridConfig(
-                        num_agents=num_agents,  # number of agents
-                        size=args.map_w,  # size of the grid
-                        density=args.obstacle_density,  # obstacle density
-                        seed=seed,  # set to None for random
-                        # obstacles, agents and targets
-                        # positions at each reset
-                        max_episode_steps=args.max_episode_steps,  # horizon
-                        obs_radius=args.obs_radius,  # defines field of view
-                        observation_type="MAPF",
-                        collision_system=args.collision_system,
-                        on_target=args.on_target,
-                    )
-
+        rng = np.random.default_rng(args.dataset_seed)
+        seeds = rng.integers(10**10, size=args.num_samples)
+        if args.get_validation_results:
+            seeds = seeds[train_id_max:validation_id_max]
         else:
-            raise ValueError(f"Unsupported map type: {args.map_type}.")
+            seeds = seeds[validation_id_max:]
+
+        _grid_config_generator = grid_config_generator_factory(
+            map_type=args.map_type,
+            map_w=args.map_w,
+            map_h=args.map_h,
+            num_agents=num_agents,
+            obstacle_density=args.obstacle_density,
+            obs_radius=args.obs_radius,
+            collision_system=args.collision_system,
+            on_target=args.on_target,
+            min_dist=args.min_dist,
+            max_episode_steps=args.max_episode_steps,
+        )
     else:
         num_agents = int(args.test_robot_density * args.test_map_h * args.test_map_w)
-        comm_radius = args.test_comm_radius
-        obs_radius = args.test_obs_radius
 
-        if args.test_map_type == "RandomGrid":
-            assert args.test_map_h == args.test_map_w, (
-                f"Expect height and width of random grid to be the same, "
-                f"but got height {args.test_map_h} and width {args.test_map_w}"
-            )
+        rng = np.random.default_rng(args.test_dataset_seed)
+        seeds = rng.integers(10**10, size=args.test_num_samples)
 
-            rng = np.random.default_rng(args.test_dataset_seed)
-            seeds = rng.integers(10**10, size=args.test_num_samples)
-
-            if args.test_wrt_expert:
-
-                def _grid_config_generator(seed, makespan):
-                    return GridConfig(
-                        num_agents=num_agents,  # number of agents
-                        size=args.test_map_w,  # size of the grid
-                        density=args.test_obstacle_density,  # obstacle density
-                        seed=seed,  # set to None for random
-                        # obstacles, agents and targets
-                        # positions at each reset
-                        max_episode_steps=3 * makespan,  # horizon
-                        obs_radius=args.test_obs_radius,  # defines field of view
-                        observation_type="MAPF",
-                        collision_system=args.test_collision_system,
-                        on_target=args.test_on_target,
-                    )
-
-            else:
-
-                def _grid_config_generator(seed):
-                    return GridConfig(
-                        num_agents=num_agents,  # number of agents
-                        size=args.test_map_w,  # size of the grid
-                        density=args.test_obstacle_density,  # obstacle density
-                        seed=seed,  # set to None for random
-                        # obstacles, agents and targets
-                        # positions at each reset
-                        max_episode_steps=args.test_max_episode_steps,  # horizon
-                        obs_radius=args.test_obs_radius,  # defines field of view
-                        observation_type="MAPF",
-                        collision_system=args.test_collision_system,
-                        on_target=args.test_on_target,
-                    )
-
-        else:
-            raise ValueError(f"Unsupported map type: {args.test_map_type}.")
+        _grid_config_generator = grid_config_generator_factory(
+            map_type=args.test_map_type,
+            map_w=args.test_map_w,
+            map_h=args.test_map_h,
+            num_agents=num_agents,
+            obstacle_density=args.test_obstacle_density,
+            obs_radius=args.test_obs_radius,
+            collision_system=args.collision_system,
+            on_target=args.test_on_target,
+            min_dist=args.test_min_dist,
+            max_episode_steps=args.test_max_episode_steps,
+        )
 
     model, hypergraph_model, dataset_kwargs = get_model(args, device)
 
@@ -232,6 +170,8 @@ def main():
 
     if args.model_epoch_num is None:
         checkpoint_path = pathlib.Path(args.checkpoints_dir, "best.pt")
+        if not checkpoint_path.exists():
+            checkpoint_path = pathlib.Path(args.checkpoints_dir, "best_low_val.pt")
     else:
         checkpoint_path = pathlib.Path(
             args.checkpoints_dir, f"epoch_{args.model_epoch_num}.pt"

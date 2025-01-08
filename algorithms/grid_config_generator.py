@@ -174,7 +174,7 @@ def grid_config_generator_factory(
 
         if (min_dist is None) or (min_dist <= 2):
 
-            def _grid_config_generator(seed):
+            def _grid_config_generator(seed, max_episode_steps=max_episode_steps):
                 return GridConfig(
                     num_agents=num_agents,  # number of agents
                     size=map_w,  # size of the grid
@@ -192,7 +192,7 @@ def grid_config_generator_factory(
         else:
             # We need a custom generator to enforce the min dist between
             # start and target pos for each agent
-            def _grid_config_generator(seed):
+            def _grid_config_generator(seed, max_episode_steps=max_episode_steps):
                 return generate_random_grid_with_min_dist(
                     seed,
                     map_w=map_w,

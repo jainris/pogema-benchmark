@@ -1,6 +1,7 @@
 from typing import Sequence
 from collections import OrderedDict
 import numpy as np
+import math
 
 from pogema import pogema_v0
 
@@ -283,6 +284,245 @@ class CNN(torch.nn.Module):
         return x
 
 
+def conv3x3(in_planes, out_planes, stride=1, padding=1, dilation=1):
+    return torch.nn.Conv2d(
+        in_planes,
+        out_planes,
+        kernel_size=3,
+        stride=stride,
+        padding=padding,
+        bias=False,
+        dilation=dilation,
+    )
+
+
+class BasicBlock(torch.nn.Module):
+    expansion = 1
+
+    def __init__(
+        self,
+        inplanes,
+        planes,
+        stride=1,
+        downsample=None,
+        dilation=(1, 1),
+        residual=True,
+    ):
+        super(BasicBlock, self).__init__()
+        self.conv1 = conv3x3(
+            inplanes, planes, stride, padding=dilation[0], dilation=dilation[0]
+        )
+        self.bn1 = torch.nn.BatchNorm2d(planes)
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(planes, planes, padding=dilation[1], dilation=dilation[1])
+        self.bn2 = torch.nn.BatchNorm2d(planes)
+        self.downsample = downsample
+        self.stride = stride
+        self.residual = residual
+
+    def reset_parameters(self):
+        self.conv1.reset_parameters()
+        self.bn1.reset_parameters()
+        self.conv2.reset_parameters()
+        self.bn2.reset_parameters()
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+        if self.residual:
+            out += residual
+        out = self.relu(out)
+
+        return out
+
+
+class ResNet(torch.nn.Module):
+    def __init__(
+        self,
+        layers,
+        num_classes=128,
+        channels=(32, 64, 128, 128),
+        out_map=False,
+        out_middle=False,
+        pool_size=2,
+        arch="D",
+    ):
+        super(ResNet, self).__init__()
+        self.inplanes = channels[0]
+        self.out_map = out_map
+        self.out_dim = channels[-1]
+        self.out_middle = out_middle
+        self.arch = arch
+
+        self.conv1 = torch.nn.Conv2d(
+            3, channels[0], kernel_size=3, stride=1, padding=1, bias=False
+        )
+        self.bn1 = torch.nn.BatchNorm2d(channels[0])
+        self.relu = torch.nn.ReLU(inplace=True)
+
+        self.layer1 = self._make_layer(BasicBlock, channels[0], layers[0], stride=2)
+        self.layer2 = self._make_layer(BasicBlock, channels[1], layers[1], stride=1)
+        self.layer3 = self._make_layer(BasicBlock, channels[2], layers[2], stride=1)
+
+        if num_classes > 0:
+            self.avgpool = torch.nn.AvgPool2d(pool_size)
+            self.fc = torch.nn.Conv2d(
+                self.out_dim, num_classes, kernel_size=1, stride=1, padding=0, bias=True
+            )
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2.0 / n))
+            elif isinstance(m, torch.nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def _make_layer(
+        self, block, planes, blocks, stride=1, dilation=1, new_level=True, residual=True
+    ):
+        assert dilation == 1 or dilation % 2 == 0
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = torch.nn.Sequential(
+                torch.nn.Conv2d(
+                    self.inplanes,
+                    planes * block.expansion,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False,
+                ),
+                torch.nn.BatchNorm2d(planes * block.expansion),
+            )
+
+        layers = list()
+        layers.append(
+            block(
+                self.inplanes,
+                planes,
+                stride,
+                downsample,
+                dilation=(
+                    (1, 1)
+                    if dilation == 1
+                    else (dilation // 2 if new_level else dilation, dilation)
+                ),
+                residual=residual,
+            )
+        )
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(
+                block(
+                    self.inplanes,
+                    planes,
+                    residual=residual,
+                    dilation=(dilation, dilation),
+                )
+            )
+
+        return torch.nn.Sequential(*layers)
+
+    def reset_parameters(self):
+        self.conv1.reset_parameters()
+        self.bn1.reset_parameters()
+        for l in self.layer1:
+            l.reset_parameters()
+        for l in self.layer2:
+            l.reset_parameters()
+        for l in self.layer3:
+            l.reset_parameters()
+        self.fc.reset_parameters()
+
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2.0 / n))
+            elif isinstance(m, torch.nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def forward(self, x):
+        y = list()
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+
+        x = self.layer1(x)
+        y.append(x)
+
+        x = self.layer2(x)
+        y.append(x)
+
+        x = self.layer3(x)
+        y.append(x)
+
+        # print("x - postCNN:", x.shape)
+        if self.out_map:
+            x = self.fc(x)
+        else:
+            x_TMP = self.avgpool(x)
+            # print('x - after avgpool', x_TMP.shape)
+            x = self.fc(x_TMP)
+            # print('x - after FCN', x.shape)
+            # print('check x == x_tmp', x-x_TMP)
+            # x = x.view(x.size(0), -1)
+
+        if self.out_middle:
+            return x, y
+        else:
+            return x
+
+
+class ResNetLarge_withMLP(torch.nn.Module):
+    def __init__(self, output_size, embedding_sizes):
+        super().__init__()
+        self.resnet = ResNet([1, 1, 1], out_map=False)
+        self.dropout = torch.nn.Dropout(0.2)
+        self.lin = torch.nn.Linear(
+            in_features=1152, out_features=output_size, bias=True
+        )
+
+        numFeatureMap = output_size
+        numCompressFeatures = [numFeatureMap] + embedding_sizes
+
+        compressmlp = []
+        for l in range(len(embedding_sizes)):
+            compressmlp.append(
+                torch.nn.Linear(
+                    in_features=numCompressFeatures[l],
+                    out_features=numCompressFeatures[l + 1],
+                    bias=True,
+                )
+            )
+        self.compressMLP = torch.nn.ModuleList(compressmlp)
+
+    def reset_parameters(self):
+        self.resnet.reset_parameters()
+        self.lin.reset_parameters()
+        for lin in self.compressMLP:
+            lin.reset_parameters()
+
+    def forward(self, x):
+        x = self.resnet(x)
+        x = self.dropout(x)
+        x = x.reshape((x.shape[0], -1))
+        x = self.lin(x)
+
+        for lin in self.compressMLP:
+            x = lin(x)
+            x = F.relu(x)
+        return x
+
+
 class DecentralPlannerGATNet(torch.nn.Module):
     def __init__(
         self,
@@ -295,6 +535,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         gnn_kwargs,
         concat_attention,
         num_classes=5,
+        cnn_mode="basic-CNN",
         cnn_output_size=None,
         num_gnn_layers=None,
         embedding_sizes_gnn=None,
@@ -327,15 +568,21 @@ class DecentralPlannerGATNet(torch.nn.Module):
         #                CNN to extract feature                             #
         #                                                                   #
         #####################################################################
-        self.cnn = CNN(
-            numChannel=[3, 32, 32, 64, 64, 128],
-            numStride=[1, 1, 1, 1, 1],
-            convW=inW,
-            convH=inH,
-            nMaxPoolFilterTaps=2,
-            numMaxPoolStride=2,
-            embedding_sizes=[cnn_output_size],
-        )
+
+        if cnn_mode == "basic-CNN":
+            self.cnn = CNN(
+                numChannel=[3, 32, 32, 64, 64, 128],
+                numStride=[1, 1, 1, 1, 1],
+                convW=inW,
+                convH=inH,
+                nMaxPoolFilterTaps=2,
+                numMaxPoolStride=2,
+                embedding_sizes=[cnn_output_size],
+            )
+        elif cnn_mode == "ResNetLarge_withMLP":
+            self.cnn = ResNetLarge_withMLP(
+                output_size=cnn_output_size, embedding_sizes=[cnn_output_size]
+            )
 
         self.numFeatures2Share = cnn_output_size
 
@@ -450,6 +697,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         parallel_or_series,
         concat_attention,
         num_classes=5,
+        cnn_mode="basic-CNN",
         cnn_output_size=None,
     ):
         super().__init__()
@@ -467,15 +715,18 @@ class AgentWithTwoNetworks(torch.nn.Module):
         #                CNN to extract feature                             #
         #                                                                   #
         #####################################################################
-        self.cnn = CNN(
-            numChannel=[3, 32, 32, 64, 64, 128],
-            numStride=[1, 1, 1, 1, 1],
-            convW=inW,
-            convH=inH,
-            nMaxPoolFilterTaps=2,
-            numMaxPoolStride=2,
-            embedding_sizes=[cnn_output_size],
-        )
+        if cnn_mode == "basic-CNN":
+            self.cnn = CNN(
+                numChannel=[3, 32, 32, 64, 64, 128],
+                numStride=[1, 1, 1, 1, 1],
+                convW=inW,
+                convH=inH,
+                nMaxPoolFilterTaps=2,
+                numMaxPoolStride=2,
+                embedding_sizes=[cnn_output_size],
+            )
+        elif cnn_mode == "ResNetLarge_withMLP":
+            self.cnn = ResNetLarge_withMLP(cnn_output_size)
 
         self.numFeatures2Share = cnn_output_size
 
@@ -867,6 +1118,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         FOV=args.obs_radius,
         numInputFeatures=args.embedding_size,
         num_attention_heads=args.num_attention_heads,
+        cnn_mode=args.cnn_mode,
         use_dropout=True,
         concat_attention=True,
         num_classes=5,

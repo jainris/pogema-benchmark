@@ -47,6 +47,7 @@ def add_training_args(parser):
     parser.add_argument("--batch_size", type=int, default=64)
 
     parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
+    parser.add_argument("--cnn_mode", type=str, default="basic-CNN")
     parser.add_argument("--embedding_size", type=int, default=128)
     parser.add_argument("--num_gnn_layers", type=int, default=3)
     parser.add_argument("--num_attention_heads", type=int, default=1)

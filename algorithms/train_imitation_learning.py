@@ -79,6 +79,10 @@ def add_training_args(parser):
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    parser.add_argument(
+        "--normalize_adjacency", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument("--cnn_mode", type=str, default="basic-CNN")
 
     return parser
 
@@ -381,7 +385,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
 
         return torch.nn.Sequential(*layers)
 
-    def addGSO(self, S, device, GSO_mode="dist_GSO_one"):
+    def addGSO(self, S, device, GSO_mode="dist_GSO"):
         # We add the GSO on real time, this GSO also depends on time and has
         # shape either B x N x N or B x E x N x N
         if self.E == 1:  # It is B x T x N x N
@@ -498,6 +502,18 @@ def run_model_on_grid(
     return all(terminated), env, observations
 
 
+def get_maxEigenValue(matrix):
+    isSymmetric = np.allclose(matrix, np.transpose(matrix, axes=[1, 0]))
+    if isSymmetric:
+        W = np.linalg.eigvalsh(matrix)
+    else:
+        W = np.linalg.eigvals(matrix)
+
+    maxEigenvalue = np.max(np.real(W), axis=0)
+    return maxEigenvalue
+    # return np.max(np.abs(np.linalg.eig(matrix)[0]))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
     parser = add_expert_dataset_args(parser)
@@ -542,7 +558,7 @@ def main():
             nGraphFilterTaps=args.num_gnn_layers,
             nAttentionHeads=args.num_attention_heads,
             use_dropout=True,
-            CNN_mode=None,
+            CNN_mode=args.cnn_mode,
             attentionMode="GAT_modified",
             AttentionConcat=True,
         ).to(device)
@@ -595,6 +611,14 @@ def main():
         dataset_terminated,
         graph_map_id,
     ) = train_dataset
+    if args.normalize_adjacency:
+        print("Normalizing Adjacency Matrices.....")
+        for t in range(len(dataset_Adj)):
+            W = dataset_Adj[t]
+            if np.any(W):
+                maxEigenValue = get_maxEigenValue(W)
+                dataset_Adj[t] = W / maxEigenValue
+        print("Done.")
 
     best_validation_success_rate = 0.0
     best_val_file_name = "best_low_val.pt"
