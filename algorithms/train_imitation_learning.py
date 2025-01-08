@@ -615,9 +615,11 @@ def main():
         print("Normalizing Adjacency Matrices.....")
         for t in range(len(dataset_Adj)):
             W = dataset_Adj[t]
+            W = W.numpy()
             if np.any(W):
                 maxEigenValue = get_maxEigenValue(W)
-                dataset_Adj[t] = W / maxEigenValue
+                W = W / maxEigenValue
+                dataset_Adj[t] = torch.from_numpy(W)
         print("Done.")
 
     best_validation_success_rate = 0.0
