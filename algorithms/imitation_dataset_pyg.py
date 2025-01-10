@@ -63,11 +63,11 @@ class MAPFGraphDataset(Dataset):
             agent_pos = self.dataset_agent_pos[index]
             edge_attr = agent_pos[edge_index[0]] - agent_pos[edge_index[1]]
         if self.use_target_vec is not None:
-            target_vec = self.target_vec[index]
+            target_vec = self.target_vec[index].to(torch.float)
             if self.use_target_vec == "target-vec+dist":
                 # Calculating dist
-                dist = torch.norm(target_vec.to(torch.float), dim=-1)
-                target_vec = torch.concatenate([target_vec, dist], dim=-1)
+                dist = torch.norm(target_vec, dim=-1)
+                target_vec = torch.concatenate([target_vec, dist], keepdim=True, dim=-1)
             extra_kwargs["target_vec"] = target_vec
         return Data(
             x=self.dataset_node_features[index],
@@ -132,10 +132,10 @@ class MAPFHypergraphDataset(Dataset):
             edge_attr = agent_pos[graph_edge_index[0]] - agent_pos[graph_edge_index[1]]
             extra_kwargs = extra_kwargs | {"graph_edge_attr": edge_attr}
         if self.use_target_vec is not None:
-            target_vec = self.target_vec[index]
+            target_vec = self.target_vec[index].to(torch.float)
             if self.use_target_vec == "target-vec+dist":
                 # Calculating dist
-                dist = torch.norm(target_vec.to(torch.float), dim=-1)
+                dist = torch.norm(target_vec, keepdim=True, dim=-1)
                 target_vec = torch.concatenate([target_vec, dist], dim=-1)
             extra_kwargs["target_vec"] = target_vec
         return Data(
