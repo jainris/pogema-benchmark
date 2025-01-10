@@ -219,6 +219,7 @@ def main():
             args,
             hypergraph_model,
             dataset_kwargs=dataset_kwargs,
+            use_target_vec=args.use_target_vec,
             aux_func=aux_func,
         )
         makespan = aux_func.makespan

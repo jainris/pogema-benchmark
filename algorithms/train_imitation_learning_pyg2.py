@@ -38,6 +38,7 @@ from grid_config_generator import (
     grid_config_generator_factory,
     generate_grid_config_from_env,
 )
+from generate_target_vec import get_target_vec_file_name, generate_target_vec
 
 
 def add_training_args(parser):
@@ -134,6 +135,7 @@ def add_training_args(parser):
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    parser.add_argument("--use_target_vec", type=str, default=None)
 
     return parser
 
@@ -189,6 +191,7 @@ def main():
 
     dense_dataset = None
     hyper_edge_indices = None
+    target_vecs = None
 
     file_name = get_imitation_dataset_file_name(args)
 
@@ -209,6 +212,12 @@ def main():
         path = pathlib.Path(args.dataset_dir, "hypergraphs", file_name)
         with open(path, "rb") as f:
             hyper_edge_indices = pickle.load(f)
+    if args.use_target_vec is not None:
+        print("Loading Target Vecs.........")
+        file_name = get_target_vec_file_name(args)
+        path = pathlib.Path(args.dataset_dir, "target_vec", file_name)
+        with open(path, "rb") as f:
+            target_vecs = pickle.load(f)
 
     loss_function = torch.nn.CrossEntropyLoss()
 
@@ -240,14 +249,32 @@ def main():
 
     if hypergraph_model:
         train_dataset = MAPFHypergraphDataset(
-            train_dataset, train_hindices, **dataset_kwargs
+            train_dataset,
+            train_hindices,
+            target_vec=target_vecs,
+            use_target_vec=args.use_target_vec,
+            **dataset_kwargs,
         )
         validation_dataset = MAPFHypergraphDataset(
-            validation_dataset, validation_hindices, **dataset_kwargs
+            validation_dataset,
+            validation_hindices,
+            target_vec=target_vecs,
+            use_target_vec=args.use_target_vec,
+            **dataset_kwargs,
         )
     else:
-        train_dataset = MAPFGraphDataset(train_dataset, **dataset_kwargs)
-        validation_dataset = MAPFGraphDataset(validation_dataset, **dataset_kwargs)
+        train_dataset = MAPFGraphDataset(
+            train_dataset,
+            target_vec=target_vecs,
+            use_target_vec=args.use_target_vec,
+            **dataset_kwargs,
+        )
+        validation_dataset = MAPFGraphDataset(
+            validation_dataset,
+            target_vec=target_vecs,
+            use_target_vec=args.use_target_vec,
+            **dataset_kwargs,
+        )
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
     validation_dl = DataLoader(validation_dataset, batch_size=args.batch_size)
 
@@ -263,6 +290,7 @@ def main():
     oe_graph_dataset = None
     oe_grid_configs = []
     oe_hypergraph_indices = []
+    oe_target_vecs = None
 
     def multiprocess_run_expert(
         queue,
@@ -327,13 +355,22 @@ def main():
             if hypergraph_model:
                 oe_dl = DataLoader(
                     MAPFHypergraphDataset(
-                        oe_graph_dataset, oe_hypergraph_indices, **dataset_kwargs
+                        oe_graph_dataset,
+                        oe_hypergraph_indices,
+                        target_vec=oe_target_vecs,
+                        use_target_vec=args.use_target_vec,
+                        **dataset_kwargs,
                     ),
                     batch_size=args.batch_size,
                 )
             else:
                 oe_dl = DataLoader(
-                    MAPFGraphDataset(oe_graph_dataset, **dataset_kwargs),
+                    MAPFGraphDataset(
+                        oe_graph_dataset,
+                        target_vec=oe_target_vecs,
+                        use_target_vec=args.use_target_vec,
+                        **dataset_kwargs,
+                    ),
                     batch_size=args.batch_size,
                 )
 
@@ -416,6 +453,7 @@ def main():
                     args=args,
                     dataset_kwargs=dataset_kwargs,
                     hypergraph_model=hypergraph_model,
+                    use_target_vec=args.use_target_vec,
                 )
 
                 if success:
@@ -478,6 +516,7 @@ def main():
                         dataset_kwargs=dataset_kwargs,
                         hypergraph_model=hypergraph_model,
                         max_episodes=args.max_episode_steps,
+                        use_target_vec=args.use_target_vec,
                     )
 
                     if not success:
@@ -590,6 +629,16 @@ def main():
                         use_edge_attr=dataset_kwargs["use_edge_attr"],
                         print_prefix=None,
                     )
+                    if args.use_target_vec is not None:
+                        new_oe_target_vec = generate_target_vec(
+                            dataset=oe_dataset, num_samples=None, print_prefix=None
+                        )
+                        if oe_target_vecs is None:
+                            oe_target_vecs = new_oe_target_vec
+                        else:
+                            oe_target_vecs = torch.concat(
+                                [oe_target_vecs, new_oe_target_vec], dim=0
+                            )
                     if oe_graph_dataset is None:
                         oe_graph_dataset = new_oe_graph_dataset
                     else:

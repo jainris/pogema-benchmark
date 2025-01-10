@@ -12,6 +12,7 @@ from torch_geometric.nn import GATConv, GATv2Conv, HypergraphConv
 
 from convert_to_imitation_dataset import generate_graph_dataset
 from generate_hypergraphs import generate_hypergraph_indices
+from generate_target_vec import generate_target_vec
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2
 from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
@@ -523,6 +524,24 @@ class ResNetLarge_withMLP(torch.nn.Module):
         return x
 
 
+def get_gnn_input_processor(use_target_vec, input_size):
+    def _use_target_vec_processor(x, data):
+        return torch.concatenate([x, data.target_vec], dim=-1)
+
+    if use_target_vec is None:
+
+        def _processor(x, data):
+            return x
+
+        return _processor, input_size
+    elif use_target_vec == "target-vec":
+        return _use_target_vec_processor, input_size + 2
+    elif use_target_vec == "target-vec+dist":
+        return _use_target_vec_processor, input_size + 3
+    else:
+        raise ValueError(f"Unsupported value for use_target_vec: {use_target_vec}.")
+
+
 class DecentralPlannerGATNet(torch.nn.Module):
     def __init__(
         self,
@@ -543,6 +562,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         use_edge_attr=False,
         edge_dim=None,
         model_residuals=None,
+        use_target_vec=None,
     ):
         super().__init__()
 
@@ -584,7 +604,9 @@ class DecentralPlannerGATNet(torch.nn.Module):
                 output_size=cnn_output_size, embedding_sizes=[cnn_output_size]
             )
 
-        self.numFeatures2Share = cnn_output_size
+        self.gnn_pre_processor, self.numFeatures2Share = get_gnn_input_processor(
+            use_target_vec=use_target_vec, input_size=cnn_output_size
+        )
 
         #####################################################################
         #                                                                   #
@@ -672,6 +694,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
 
     def forward(self, x, data):
         x = self.cnn(x)
+        x = self.gnn_pre_processor(x, data)
         for conv in self.gnns:
             x = conv(x, data)
             x = F.relu(x)
@@ -699,6 +722,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         num_classes=5,
         cnn_mode="basic-CNN",
         cnn_output_size=None,
+        use_target_vec=None,
     ):
         super().__init__()
 
@@ -728,7 +752,9 @@ class AgentWithTwoNetworks(torch.nn.Module):
         elif cnn_mode == "ResNetLarge_withMLP":
             self.cnn = ResNetLarge_withMLP(cnn_output_size)
 
-        self.numFeatures2Share = cnn_output_size
+        self.gnn_pre_processor, self.numFeatures2Share = get_gnn_input_processor(
+            use_target_vec=use_target_vec, input_size=cnn_output_size
+        )
 
         #####################################################################
         #                                                                   #
@@ -817,11 +843,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 gnn1_last_embd_sz == gnn2_last_embd_sz
             ), "Expecting both output sizes to be the same."
         elif self.parallel_or_series == "series":
-            starting_sz = (
-                gnn2_kwargs["embedding_sizes_gnn"][0]
-                if "embedding_sizes_gnn" in gnn2_kwargs
-                else numInputFeatures
-            )
+            starting_sz = self.numFeatures2Share
             assert (
                 num_attention_heads * gnn1_last_embd_sz == starting_sz
             ), "Expecting the output size of gnn1 to match the input size of gnn2."
@@ -866,6 +888,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
 
     def forward(self, x, data):
         x = self.cnn(x)
+        x = self.gnn_pre_processor(x, data)
 
         gnn1_out = x
         for conv in self.gnns1:
@@ -902,6 +925,7 @@ def run_model_on_grid(
     args,
     hypergraph_model,
     dataset_kwargs,
+    use_target_vec,
     max_episodes=None,
     aux_func=None,
 ):
@@ -922,6 +946,13 @@ def run_model_on_grid(
             use_edge_attr=dataset_kwargs["use_edge_attr"],
             print_prefix=None,
         )
+        target_vec = None
+        if args.use_target_vec is not None:
+            target_vec = generate_target_vec(
+                dataset=[[[observations], [0], [0]]],
+                num_samples=None,
+                print_prefix=None,
+            )
         if hypergraph_model:
             hindex = generate_hypergraph_indices(
                 env,
@@ -930,9 +961,20 @@ def run_model_on_grid(
                 move_results,
                 args.generate_graph_from_hyperedges,
             )
-            gdata = MAPFHypergraphDataset(gdata, [hindex], **dataset_kwargs)[0]
+            gdata = MAPFHypergraphDataset(
+                gdata,
+                [hindex],
+                target_vec=target_vec,
+                use_target_vec=args.use_target_vec,
+                **dataset_kwargs,
+            )[0]
         else:
-            gdata = MAPFGraphDataset(gdata, **dataset_kwargs)[0]
+            gdata = MAPFGraphDataset(
+                gdata,
+                target_vec=target_vec,
+                use_target_vec=args.use_target_vec,
+                **dataset_kwargs,
+            )[0]
 
         gdata.to(device)
 

@@ -37,7 +37,9 @@ def decode_dense_dataset(dense_dataset, use_edge_attr):
 
 
 class MAPFGraphDataset(Dataset):
-    def __init__(self, dense_dataset, use_edge_attr) -> None:
+    def __init__(
+        self, dense_dataset, use_edge_attr, target_vec=None, use_target_vec=None
+    ) -> None:
         (
             self.dataset_node_features,
             self.dataset_Adj,
@@ -47,6 +49,8 @@ class MAPFGraphDataset(Dataset):
             self.dataset_agent_pos,
         ) = decode_dense_dataset(dense_dataset, use_edge_attr)
         self.use_edge_attr = use_edge_attr
+        self.target_vec = target_vec
+        self.use_target_vec = use_target_vec
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -54,9 +58,17 @@ class MAPFGraphDataset(Dataset):
     def __getitem__(self, index):
         edge_index, edge_weight = dense_to_sparse(self.dataset_Adj[index])
         edge_attr = None
+        extra_kwargs = dict()
         if self.use_edge_attr:
             agent_pos = self.dataset_agent_pos[index]
             edge_attr = agent_pos[edge_index[0]] - agent_pos[edge_index[1]]
+        if self.use_target_vec is not None:
+            target_vec = self.target_vec[index]
+            if self.use_target_vec == "target-vec+dist":
+                # Calculating dist
+                dist = torch.norm(target_vec, dim=-1)
+                target_vec = torch.concatenate([target_vec, dist], dim=-1)
+            extra_kwargs["target_vec"] = target_vec
         return Data(
             x=self.dataset_node_features[index],
             edge_index=edge_index,
@@ -64,6 +76,7 @@ class MAPFGraphDataset(Dataset):
             edge_attr=edge_attr,
             y=self.dataset_target_actions[index],
             terminated=self.dataset_terminated[index],
+            **extra_kwargs,
         )
 
 
@@ -75,6 +88,8 @@ class MAPFHypergraphDataset(Dataset):
         store_graph_indices=False,
         use_edge_attr=False,
         use_graph_edge_attr=False,
+        target_vec=None,
+        use_target_vec=None,
     ) -> None:
         (
             self.dataset_node_features,
@@ -88,6 +103,8 @@ class MAPFHypergraphDataset(Dataset):
         self.store_graph_indices = store_graph_indices
         self.use_edge_attr = use_edge_attr
         self.use_graph_edge_attr = use_graph_edge_attr
+        self.target_vec = target_vec
+        self.use_target_vec = use_target_vec
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -114,6 +131,13 @@ class MAPFHypergraphDataset(Dataset):
                 )
             edge_attr = agent_pos[graph_edge_index[0]] - agent_pos[graph_edge_index[1]]
             extra_kwargs = extra_kwargs | {"graph_edge_attr": edge_attr}
+        if self.use_target_vec is not None:
+            target_vec = self.target_vec[index]
+            if self.use_target_vec == "target-vec+dist":
+                # Calculating dist
+                dist = torch.norm(target_vec, dim=-1)
+                target_vec = torch.concatenate([target_vec, dist], dim=-1)
+            extra_kwargs["target_vec"] = target_vec
         return Data(
             x=self.dataset_node_features[index],
             edge_index=torch.LongTensor(self.hyperedge_indices[index]),
