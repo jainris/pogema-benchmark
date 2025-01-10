@@ -66,7 +66,7 @@ class MAPFGraphDataset(Dataset):
             target_vec = self.target_vec[index]
             if self.use_target_vec == "target-vec+dist":
                 # Calculating dist
-                dist = torch.norm(target_vec, dim=-1)
+                dist = torch.norm(target_vec.to(torch.float), dim=-1)
                 target_vec = torch.concatenate([target_vec, dist], dim=-1)
             extra_kwargs["target_vec"] = target_vec
         return Data(
@@ -135,7 +135,7 @@ class MAPFHypergraphDataset(Dataset):
             target_vec = self.target_vec[index]
             if self.use_target_vec == "target-vec+dist":
                 # Calculating dist
-                dist = torch.norm(target_vec, dim=-1)
+                dist = torch.norm(target_vec.to(torch.float), dim=-1)
                 target_vec = torch.concatenate([target_vec, dist], dim=-1)
             extra_kwargs["target_vec"] = target_vec
         return Data(
