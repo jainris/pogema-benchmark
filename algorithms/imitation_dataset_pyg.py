@@ -66,8 +66,8 @@ class MAPFGraphDataset(Dataset):
             target_vec = self.target_vec[index].to(torch.float)
             if self.use_target_vec == "target-vec+dist":
                 # Calculating dist
-                dist = torch.norm(target_vec, dim=-1)
-                target_vec = torch.concatenate([target_vec, dist], keepdim=True, dim=-1)
+                dist = torch.norm(target_vec, keepdim=True, dim=-1)
+                target_vec = torch.concatenate([target_vec, dist], dim=-1)
             extra_kwargs["target_vec"] = target_vec
         return Data(
             x=self.dataset_node_features[index],
