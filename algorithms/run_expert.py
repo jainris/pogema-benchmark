@@ -39,6 +39,9 @@ def add_expert_dataset_args(parser):
     parser.add_argument(
         "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--pibt_expert_relevance_training", action=argparse.BooleanOptionalAction, default=False
+    )
 
     return parser
 
@@ -50,6 +53,8 @@ def get_expert_dataset_file_name(args):
         if (key == "min_dist") and (dict_args[key] is None):
             continue
         file_name += f"_{key}_{dict_args[key]}"
+    if args.pibt_expert_relevance_training:
+        file_name += "pibt_relevance"
     file_name = file_name[1:] + ".pkl"
     return file_name
 
