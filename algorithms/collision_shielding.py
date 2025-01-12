@@ -107,7 +107,7 @@ class PIBTInstance(PIBT):
                 key=lambda u: transition_probabilities[i][move_idx[u]],
                 reverse=True,
             )
-        elif self.sampling_method == "probablistic":
+        elif self.sampling_method == "probabilistic":
             cur_trans_probs = transition_probabilities[i][mask]
             cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
 
