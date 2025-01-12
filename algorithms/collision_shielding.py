@@ -17,6 +17,8 @@ class BaseCollisionShielding:
 class NaiveCollisionShielding(BaseCollisionShielding):
     def __init__(self, model, env, sampling_method="deterministic"):
         super().__init__(model, env, sampling_method)
+        if self.sampling_method == "probabilistic":
+            self.rng = np.random.default_rng(seed=env.grid_config.seed)
 
     def get_actions(self, gdata):
         # Naive collision shielding leaves the shielding to the env
@@ -24,6 +26,21 @@ class NaiveCollisionShielding(BaseCollisionShielding):
         actions = self.model(gdata.x, gdata)
         if self.sampling_method == "deterministic":
             actions = torch.argmax(actions, dim=-1).detach().cpu()
+        elif self.sampling_method == "probabilistic":
+            probs = torch.nn.functional.softmax(actions, dim=-1)
+            probs = probs.detach().cpu().numpy()
+
+            # Despite using softmax, sum might not be 1 due to fp errors
+            probs = probs / np.sum(probs)
+
+            actions = []
+            ids = np.arange(probs.shape[1])
+            for i in range(probs.shape[0]):
+                actions.append(
+                    self.rng.choice(
+                        ids, size=len(ids), replace=False, p=probs[i], shuffle=False
+                    )
+                )
         else:
             raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
         return actions
@@ -94,14 +111,7 @@ class PIBTInstance(PIBT):
             )
         elif self.sampling_method == "probablistic":
             cur_trans_probs = transition_probabilities[i][mask]
-            cur_trans_probs = (
-                torch.nn.functional.softmax(cur_trans_probs, dim=-1)
-                .detach()
-                .cpu()
-                .numpy()
-            )
             cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
-            # cur_trans_probs = cur_trans_probs / torch.sum(cur_trans_probs)
 
             ids = np.arange(len(C))
             ids = self.rng.choice(
@@ -199,6 +209,9 @@ class PIBTCollisionShielding(BaseCollisionShielding):
 
     def get_actions(self, gdata):
         actions = self.model(gdata.x, gdata)
+        if self.sampling_method == "probabilistic":
+            actions = torch.nn.functional.softmax(actions, dim=-1)
+            actions = actions.detach().cpu().numpy()
         actions = self.pibt_instance.step(actions)
         return actions
 
