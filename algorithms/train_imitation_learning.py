@@ -84,6 +84,11 @@ def add_training_args(parser):
     )
     parser.add_argument("--cnn_mode", type=str, default="basic-CNN")
     parser.add_argument("--attention_mode", type=str, default="GAT_modified")
+    parser.add_argument(
+        "--train_on_terminated_agents",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
 
     return parser
 
@@ -680,8 +685,9 @@ def main():
             model.addGSO(cur_adj, device)
             out = model(cur_node_features, device)
 
-            out = out[~cur_terminated]
-            cur_target_actions = cur_target_actions[~cur_terminated]
+            if not args.train_on_terminated_agents:
+                out = out[~cur_terminated]
+                cur_target_actions = cur_target_actions[~cur_terminated]
             loss = loss_function(out, cur_target_actions)
 
             total_loss += loss.item()
@@ -733,8 +739,9 @@ def main():
                 model.addGSO(cur_adj, device)
                 out = model(cur_node_features, device)
 
-                out = out[~cur_terminated]
-                cur_target_actions = cur_target_actions[~cur_terminated]
+                if not args.train_on_terminated_agents:
+                    out = out[~cur_terminated]
+                    cur_target_actions = cur_target_actions[~cur_terminated]
                 loss = loss_function(out, cur_target_actions)
 
                 total_loss += loss.item()
