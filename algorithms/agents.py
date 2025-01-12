@@ -14,6 +14,7 @@ from convert_to_imitation_dataset import generate_graph_dataset
 from generate_hypergraphs import generate_hypergraph_indices
 from generate_target_vec import generate_target_vec
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
+from collision_shielding import get_collision_shielded_model
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2
 from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
 from gnn_magat_pyg import HGAT, HMAGAT, HMAGAT2, HMAGAT3, HGATv2
@@ -936,6 +937,8 @@ def run_model_on_grid(
     if aux_func is not None:
         aux_func(env=env, observations=observations, actions=None)
 
+    model = get_collision_shielded_model(model, env, args)
+
     while True:
         gdata = generate_graph_dataset(
             dataset=[[[observations], [0], [0]]],
@@ -947,7 +950,7 @@ def run_model_on_grid(
             print_prefix=None,
         )
         target_vec = None
-        if args.use_target_vec is not None:
+        if use_target_vec is not None:
             target_vec = generate_target_vec(
                 dataset=[[[observations], [0], [0]]],
                 num_samples=None,
@@ -965,22 +968,20 @@ def run_model_on_grid(
                 gdata,
                 [hindex],
                 target_vec=target_vec,
-                use_target_vec=args.use_target_vec,
+                use_target_vec=use_target_vec,
                 **dataset_kwargs,
             )[0]
         else:
             gdata = MAPFGraphDataset(
                 gdata,
                 target_vec=target_vec,
-                use_target_vec=args.use_target_vec,
+                use_target_vec=use_target_vec,
                 **dataset_kwargs,
             )[0]
 
         gdata.to(device)
 
-        actions = model(gdata.x, gdata)
-        actions = torch.argmax(actions, dim=-1).detach().cpu()
-
+        actions = model.get_actions(gdata)
         observations, rewards, terminated, truncated, infos = env.step(actions)
 
         if aux_func is not None:

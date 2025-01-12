@@ -136,6 +136,8 @@ def add_training_args(parser):
         default=True,
     )
     parser.add_argument("--use_target_vec", type=str, default=None)
+    parser.add_argument("--collision_shielding", type=str, default="naive")
+    parser.add_argument("--action_sampling", type=str, default="deterministic")
 
     return parser
 
