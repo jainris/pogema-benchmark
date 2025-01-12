@@ -417,6 +417,8 @@ def main():
             loss.backward()
             optimizer.step()
 
+            target_actions = target_actions.reshape((*out.shape[:-1], -1))
+            target_actions = torch.argmax(out, dim=-1)
             tot_correct += (
                 torch.sum(torch.argmax(out, dim=-1) == target_actions).detach().cpu()
             )
