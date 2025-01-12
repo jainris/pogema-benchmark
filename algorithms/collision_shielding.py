@@ -111,10 +111,21 @@ class PIBTInstance(PIBT):
             cur_trans_probs = transition_probabilities[i][mask]
             cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
 
-            ids = np.arange(len(C))
-            ids = self.rng.choice(
-                ids, size=len(C), replace=False, p=cur_trans_probs, shuffle=False
-            )
+            try:
+                ids = np.arange(len(C))
+                ids = self.rng.choice(
+                    ids, size=len(C), replace=False, p=cur_trans_probs, shuffle=False
+                )
+            except:
+                # Potential error due to zeroing of some probs
+                EPSILON = 1e-6
+                cur_trans_probs = cur_trans_probs + EPSILON
+                cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
+
+                ids = np.arange(len(C))
+                ids = self.rng.choice(
+                    ids, size=len(C), replace=False, p=cur_trans_probs, shuffle=False
+                )
         else:
             raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
 
