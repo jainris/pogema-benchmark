@@ -33,13 +33,11 @@ class NaiveCollisionShielding(BaseCollisionShielding):
             # Despite using softmax, sum might not be 1 due to fp errors
             probs = probs / np.sum(probs, keepdims=True, axis=-1)
 
-            actions = []
+            actions = np.zeros(probs.shape[0], dtype=np.int)
             ids = np.arange(probs.shape[1])
             for i in range(probs.shape[0]):
-                actions.append(
-                    self.rng.choice(
-                        ids, size=len(ids), replace=False, p=probs[i], shuffle=False
-                    )
+                actions[i] = self.rng.choice(
+                    ids, size=len(ids), replace=False, p=probs[i], shuffle=False
                 )
         else:
             raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
