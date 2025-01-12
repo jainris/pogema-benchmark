@@ -31,7 +31,7 @@ class NaiveCollisionShielding(BaseCollisionShielding):
             probs = probs.detach().cpu().numpy()
 
             # Despite using softmax, sum might not be 1 due to fp errors
-            probs = probs / np.sum(probs)
+            probs = probs / np.sum(probs, axis=-1)
 
             actions = []
             ids = np.arange(probs.shape[1])
