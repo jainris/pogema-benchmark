@@ -160,7 +160,7 @@ class PIBTInstance(PIBT):
         return Q_to
 
     def step(self, transition_probabilities):
-        self.actions = np.zeros(self.N)
+        self.actions = np.zeros(self.N, dtype=np.int)
         if self.reached_goals:
             return self.actions
         self.state = self._step(self.state, self.priorities, transition_probabilities)
@@ -188,6 +188,7 @@ class PIBTCollisionShielding(BaseCollisionShielding):
             goals=goals,
             moves=env.grid_config.MOVES,
             seed=env.grid_config.seed,
+            sampling_method=sampling_method,
         )
 
     def get_actions(self, gdata):
