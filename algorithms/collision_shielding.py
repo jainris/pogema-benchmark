@@ -126,7 +126,7 @@ class PIBTInstance(PIBT):
             if (
                 j != self.NIL
                 and (Q_to[j] == self.NIL_COORD)
-                and (not self.funcPIBT(Q_from, Q_to, j))
+                and (not self.funcPIBT(Q_from, Q_to, j, transition_probabilities))
             ):
                 continue
 
