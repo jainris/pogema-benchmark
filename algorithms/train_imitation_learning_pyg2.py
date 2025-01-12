@@ -19,6 +19,7 @@ from convert_to_imitation_dataset import (
     add_imitation_dataset_args,
     generate_graph_dataset,
     get_imitation_dataset_file_name,
+    get_legacy_imitation_dataset_file_name,
 )
 from generate_hypergraphs import (
     add_hypergraph_generation_args,
@@ -205,12 +206,23 @@ def main():
     target_vecs = None
     relevances = None
 
-    file_name = get_imitation_dataset_file_name(args)
+    try:
+        file_name = get_imitation_dataset_file_name(args)
 
-    print("Loading Dataset.............")
-    path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
-    with open(path, "rb") as f:
-        dense_dataset = pickle.load(f)
+        print("Loading Dataset.............")
+        path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
+
+        with open(path, "rb") as f:
+            dense_dataset = pickle.load(f)
+    except:
+        print(f"Could not find file: {path}, trying legacy file name.")
+        file_name = get_legacy_imitation_dataset_file_name(args)
+
+        print("Loading Dataset.............")
+        path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
+
+        with open(path, "rb") as f:
+            dense_dataset = pickle.load(f)
     if args.load_positions_separately:
         print("Loading Agent Positions.....")
         file_name = get_pos_file_name(args)

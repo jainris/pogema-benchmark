@@ -7,6 +7,7 @@ import torch
 from scipy.spatial.distance import squareform, pdist
 
 from run_expert import (
+    DATASET_FILE_NAME_DEFAULT,
     DATASET_FILE_NAME_KEYS,
     add_expert_dataset_args,
     get_expert_dataset_file_name,
@@ -19,7 +20,7 @@ def add_imitation_dataset_args(parser):
     return parser
 
 
-def get_imitation_dataset_file_name(args):
+def get_legacy_imitation_dataset_file_name(args):
     file_name = ""
     dict_args = vars(args)
     load_positions_separately = dict_args.get("load_positions_separately", False)
@@ -29,6 +30,25 @@ def get_imitation_dataset_file_name(args):
         if (key == "min_dist") and (dict_args[key] is None):
             continue
         file_name += f"_{key}_{dict_args[key]}"
+    if args.pibt_expert_relevance_training:
+        file_name += "_pibt_relevance"
+    if (not load_positions_separately) and use_edge_attr:
+        file_name += "_pos"
+    file_name = file_name[1:] + ".pkl"
+    return file_name
+
+
+def get_imitation_dataset_file_name(args):
+    file_name = ""
+    dict_args = vars(args)
+    load_positions_separately = dict_args.get("load_positions_separately", False)
+    use_edge_attr = dict_args.get("use_edge_attr", False)
+
+    for key in sorted(DATASET_FILE_NAME_KEYS):
+        if (key == "min_dist") and (dict_args[key] is None):
+            continue
+        if dict_args[key] != DATASET_FILE_NAME_DEFAULT[key]:
+            file_name += f"_{key}_{dict_args[key]}"
     if args.pibt_expert_relevance_training:
         file_name += "_pibt_relevance"
     if (not load_positions_separately) and use_edge_attr:
