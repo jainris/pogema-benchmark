@@ -37,7 +37,7 @@ class NaiveCollisionShielding(BaseCollisionShielding):
             ids = np.arange(probs.shape[1])
             for i in range(probs.shape[0]):
                 actions[i] = self.rng.choice(
-                    ids, size=len(ids), replace=False, p=probs[i], shuffle=False
+                    ids, size=1, replace=False, p=probs[i], shuffle=False
                 )
         else:
             raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
