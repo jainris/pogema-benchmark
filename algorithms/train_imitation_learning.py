@@ -36,6 +36,8 @@ from grid_config_generator import (
     generate_grid_config_from_env,
 )
 
+from collision_shielding import NaiveCollisionShielding, PIBTCollisionShielding
+
 
 def add_training_args(parser):
     parser.add_argument("--imitation_learning_model", type=str, default="MAGAT")
@@ -89,6 +91,8 @@ def add_training_args(parser):
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    parser.add_argument("--collision_shielding", type=str, default="naive")
+    parser.add_argument("--action_sampling", type=str, default="deterministic")
 
     return parser
 
@@ -446,17 +450,80 @@ class DecentralPlannerGATNet(torch.nn.Module):
         return action_predict
 
 
+class NaiveCollisionShieldingMAGAT(NaiveCollisionShielding):
+    def get_actions(self, gdata, device):
+        # Naive collision shielding leaves the shielding to the env
+        # So just returning the actions given by the model
+        self.model.addGSO(gdata[1].to(device), device)
+        actions = self.model(gdata[0].to(device), device)
+
+        if self.sampling_method == "deterministic":
+            actions = torch.argmax(actions, dim=-1).detach().cpu()
+        elif self.sampling_method == "probabilistic":
+            probs = torch.nn.functional.softmax(actions, dim=-1)
+            probs = probs.detach().cpu().numpy()
+
+            # Despite using softmax, sum might not be 1 due to fp errors
+            probs = probs / np.sum(probs, keepdims=True, axis=-1)
+
+            actions = np.zeros(probs.shape[0], dtype=np.int)
+            ids = np.arange(probs.shape[1])
+            for i in range(probs.shape[0]):
+                actions[i] = self.rng.choice(
+                    ids, size=1, replace=False, p=probs[i], shuffle=False
+                )
+        else:
+            raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
+        return actions
+
+
+class PIBTCollisionShieldingMAGAT(PIBTCollisionShielding):
+    def get_actions(self, gdata, device):
+        self.model.addGSO(gdata[1].to(device), device)
+        actions = self.model(gdata[0].to(device), device)
+
+        if self.sampling_method == "probabilistic":
+            actions = torch.nn.functional.softmax(actions, dim=-1)
+            actions = actions.detach().cpu().numpy()
+        actions = self.pibt_instance.step(actions)
+        return actions
+
+
+def get_collision_shielded_model(model, env, collision_shielding, action_sampling):
+    if collision_shielding == "naive":
+        return NaiveCollisionShieldingMAGAT(
+            model=model, env=env, sampling_method=action_sampling
+        )
+    elif collision_shielding == "pibt":
+        return PIBTCollisionShieldingMAGAT(
+            model=model, env=env, sampling_method=action_sampling
+        )
+    else:
+        raise ValueError(
+            f"Unsupported collision shielding method: {collision_shielding}."
+        )
+
+
 def run_model_on_grid(
     model,
     comm_radius,
     obs_radius,
     grid_config,
     device,
+    collision_shielding,
+    action_sampling,
     max_episodes=None,
     aux_func=None,
 ):
     env = pogema_v0(grid_config=grid_config)
     observations, infos = env.reset()
+
+    model = get_collision_shielded_model(
+        model,
+        env,
+        collision_shielding=collision_shielding,
+        action_sampling=action_sampling,
+    )
 
     if aux_func is not None:
         aux_func(env=env, observations=observations, actions=None)
@@ -472,10 +539,7 @@ def run_model_on_grid(
                 print_prefix=None,
             )
 
-            model.addGSO(gdata[1].to(device), device)
-            actions = model(gdata[0].to(device), device)
-            actions = torch.argmax(actions, dim=-1).detach().cpu()
-
+            actions = model.get_actions(gdata, device)
             observations, rewards, terminated, truncated, infos = env.step(actions)
 
             if aux_func is not None:
@@ -494,10 +558,7 @@ def run_model_on_grid(
                 None,
             )
 
-            model.addGSO(gdata[1].to(device), device)
-            actions = model(gdata[0].to(device), device)
-            actions = torch.argmax(actions, dim=-1).detach().cpu()
-
+            actions = model.get_actions(gdata, device)
             observations, rewards, terminated, truncated, infos = env.step(actions)
 
             if aux_func is not None:
@@ -781,6 +842,8 @@ def main():
                     args.obs_radius,
                     _grid_config_generator(seeds[graph_id]),
                     device,
+                    collision_shielding=args.collision_shielding,
+                    action_sampling=args.action_sampling,
                 )
 
                 if success:
@@ -837,6 +900,8 @@ def main():
                         args.obs_radius,
                         grid_config,
                         device,
+                        collision_shielding=args.collision_shielding,
+                        action_sampling=args.action_sampling,
                     )
 
                     if not success:
