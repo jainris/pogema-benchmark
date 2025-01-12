@@ -94,7 +94,13 @@ class PIBTInstance(PIBT):
             )
         elif self.sampling_method == "probablistic":
             cur_trans_probs = transition_probabilities[i][mask]
-            cur_trans_probs = torch.nn.functional.softmax(cur_trans_probs, dim=-1)
+            cur_trans_probs = (
+                torch.nn.functional.softmax(cur_trans_probs, dim=-1)
+                .detach()
+                .cpu()
+                .numpy()
+            )
+            cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
             # cur_trans_probs = cur_trans_probs / torch.sum(cur_trans_probs)
 
             ids = np.arange(len(C))
