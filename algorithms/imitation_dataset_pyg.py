@@ -38,7 +38,13 @@ def decode_dense_dataset(dense_dataset, use_edge_attr):
 
 class MAPFGraphDataset(Dataset):
     def __init__(
-        self, dense_dataset, use_edge_attr, target_vec=None, use_target_vec=None
+        self,
+        dense_dataset,
+        use_edge_attr,
+        target_vec=None,
+        use_target_vec=None,
+        return_relevance_as_y=False,
+        relevances=None,
     ) -> None:
         (
             self.dataset_node_features,
@@ -51,6 +57,8 @@ class MAPFGraphDataset(Dataset):
         self.use_edge_attr = use_edge_attr
         self.target_vec = target_vec
         self.use_target_vec = use_target_vec
+        self.return_relevance_as_y = return_relevance_as_y
+        self.relevances = relevances
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -58,6 +66,8 @@ class MAPFGraphDataset(Dataset):
     def __getitem__(self, index):
         edge_index, edge_weight = dense_to_sparse(self.dataset_Adj[index])
         edge_attr = None
+        y = self.dataset_target_actions[index]
+
         extra_kwargs = dict()
         if self.use_edge_attr:
             agent_pos = self.dataset_agent_pos[index]
@@ -69,12 +79,18 @@ class MAPFGraphDataset(Dataset):
                 dist = torch.norm(target_vec, keepdim=True, dim=-1)
                 target_vec = torch.concatenate([target_vec, dist], dim=-1)
             extra_kwargs["target_vec"] = target_vec
+        if self.return_relevance_as_y:
+            extra_kwargs = extra_kwargs | {"original_y": y}
+            y = self.relevances[index]
+        else:
+            if self.relevances is not None:
+                extra_kwargs = extra_kwargs | {"relevances": self.relevances[index]}
         return Data(
             x=self.dataset_node_features[index],
             edge_index=edge_index,
             edge_weight=edge_weight,
             edge_attr=edge_attr,
-            y=self.dataset_target_actions[index],
+            y=y,
             terminated=self.dataset_terminated[index],
             **extra_kwargs,
         )
@@ -90,6 +106,8 @@ class MAPFHypergraphDataset(Dataset):
         use_graph_edge_attr=False,
         target_vec=None,
         use_target_vec=None,
+        return_relevance_as_y=False,
+        relevances=None,
     ) -> None:
         (
             self.dataset_node_features,
@@ -105,6 +123,8 @@ class MAPFHypergraphDataset(Dataset):
         self.use_graph_edge_attr = use_graph_edge_attr
         self.target_vec = target_vec
         self.use_target_vec = use_target_vec
+        self.return_relevance_as_y = return_relevance_as_y
+        self.relevances = relevances
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -112,6 +132,7 @@ class MAPFHypergraphDataset(Dataset):
     def __getitem__(self, index):
         extra_kwargs = dict()
         graph_edge_index, graph_edge_weight = None, None
+        y = self.dataset_target_actions[index]
 
         if self.use_edge_attr:
             raise NotImplementedError("Yet to implement")
@@ -138,10 +159,16 @@ class MAPFHypergraphDataset(Dataset):
                 dist = torch.norm(target_vec, keepdim=True, dim=-1)
                 target_vec = torch.concatenate([target_vec, dist], dim=-1)
             extra_kwargs["target_vec"] = target_vec
+        if self.return_relevance_as_y:
+            extra_kwargs = extra_kwargs | {"original_y": y}
+            y = self.relevances[index]
+        else:
+            if self.relevances is not None:
+                extra_kwargs = extra_kwargs | {"relevances": self.relevances[index]}
         return Data(
             x=self.dataset_node_features[index],
             edge_index=torch.LongTensor(self.hyperedge_indices[index]),
-            y=self.dataset_target_actions[index],
+            y=y,
             terminated=self.dataset_terminated[index],
             **extra_kwargs,
         )

@@ -27,6 +27,7 @@ from generate_hypergraphs import (
 )
 from generate_pos import get_pos_file_name
 from run_expert import (
+    get_expert_dataset_file_name,
     get_expert_algorithm_and_config,
     run_expert_algorithm,
     add_expert_dataset_args,
@@ -39,6 +40,8 @@ from grid_config_generator import (
     generate_grid_config_from_env,
 )
 from generate_target_vec import get_target_vec_file_name, generate_target_vec
+
+from ranking_losses import PairwiseLogisticLoss
 
 
 def add_training_args(parser):
@@ -139,6 +142,12 @@ def add_training_args(parser):
     parser.add_argument("--collision_shielding", type=str, default="naive")
     parser.add_argument("--action_sampling", type=str, default="deterministic")
 
+    parser.add_argument(
+        "--train_only_for_relevance",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+
     return parser
 
 
@@ -194,6 +203,7 @@ def main():
     dense_dataset = None
     hyper_edge_indices = None
     target_vecs = None
+    relevances = None
 
     file_name = get_imitation_dataset_file_name(args)
 
@@ -220,8 +230,21 @@ def main():
         path = pathlib.Path(args.dataset_dir, "target_vec", file_name)
         with open(path, "rb") as f:
             target_vecs = pickle.load(f)
+    if args.pibt_expert_relevance_training:
+        print("Loading Relevance Scores....")
+        file_name = get_expert_dataset_file_name(args)
+        path = pathlib.Path(f"{args.dataset_dir}", "pibt_relevance", f"{file_name}")
+        with open(path, "rb") as f:
+            relevances = pickle.load(f)
+        relevances = torch.from_numpy(relevances)
 
-    loss_function = torch.nn.CrossEntropyLoss()
+    if args.train_only_for_relevance:
+        assert (
+            args.pibt_expert_relevance_training
+        ), "Need the relevance data to train for relevance."
+        loss_function = PairwiseLogisticLoss()
+    else:
+        loss_function = torch.nn.CrossEntropyLoss()
 
     wandb.init(
         project="hyper-mapf-pogema",
@@ -238,13 +261,15 @@ def main():
 
     def _divide_dataset(start, end):
         mask = torch.logical_and(dense_dataset[4] >= start, dense_dataset[4] < end)
-        hindices = None
+        hindices, relevs = None, None
         if hyper_edge_indices is not None:
             hindices = list(compress(hyper_edge_indices, mask))
-        return tuple(gd[mask] for gd in dense_dataset), hindices
+        if relevances is not None:
+            relevs = relevances[mask]
+        return tuple(gd[mask] for gd in dense_dataset), hindices, relevs
 
-    train_dataset, train_hindices = _divide_dataset(0, train_id_max)
-    validation_dataset, validation_hindices = _divide_dataset(
+    train_dataset, train_hindices, train_relevances = _divide_dataset(0, train_id_max)
+    validation_dataset, validation_hindices, validation_relevances = _divide_dataset(
         train_id_max, validation_id_max
     )
     # test_dataset = _divide_dataset(validation_id_max, torch.inf)
@@ -393,6 +418,8 @@ def main():
                 loss.backward()
                 optimizer.step()
 
+                target_actions = target_actions.reshape((*out.shape[:-1], -1))
+                target_actions = torch.argmax(out, dim=-1)
                 tot_correct += (
                     torch.sum(torch.argmax(out, dim=-1) == target_actions)
                     .detach()
@@ -432,6 +459,8 @@ def main():
                     if not args.train_on_terminated_agents:
                         out = out[~data.terminated]
                         target_actions = target_actions[~data.terminated]
+                    target_actions = target_actions.reshape((*out.shape[:-1], -1))
+                    target_actions = torch.argmax(out, dim=-1)
                     val_correct += (
                         torch.sum(torch.argmax(out, dim=-1) == target_actions)
                         .detach()
