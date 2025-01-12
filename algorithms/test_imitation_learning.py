@@ -282,9 +282,14 @@ def main():
         else:
             grid_config = _grid_config_generator(seed)
         success, env, _ = run_model_on_grid(
-            model, comm_radius, obs_radius, grid_config, device, aux_func=aux_func, 
-                    collision_shielding=args.collision_shielding,
-                    action_sampling=args.action_sampling,
+            model,
+            comm_radius,
+            obs_radius,
+            grid_config,
+            device,
+            aux_func=aux_func,
+            collision_shielding=args.collision_shielding,
+            action_sampling=args.action_sampling,
         )
         makespan = aux_func.makespan
         flowtime = aux_func.flowtime
