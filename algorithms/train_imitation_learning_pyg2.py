@@ -43,6 +43,8 @@ from grid_config_generator import (
 from generate_target_vec import get_target_vec_file_name, generate_target_vec
 
 from ranking_losses import PairwiseLogisticLoss
+from pibt_training import get_expert_algorithm_and_config as get_pibt_alg
+from pibt_training import run_expert_algorithm as run_pibt
 
 
 def add_training_args(parser):
@@ -191,7 +193,10 @@ def main():
 
     grid_config = _grid_config_generator(seeds[0])
 
-    expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
+    if args.train_only_for_relevance:
+        expert_algorithm, inference_config = get_pibt_alg(args)
+    else:
+        expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
     torch.manual_seed(args.model_seed)
     model, hypergraph_model, dataset_kwargs = get_model(args, device)
@@ -292,6 +297,8 @@ def main():
             train_hindices,
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
+            return_relevance_as_y=args.train_only_for_relevance,
+            relevances=relevances,
             **dataset_kwargs,
         )
         validation_dataset = MAPFHypergraphDataset(
@@ -299,6 +306,8 @@ def main():
             validation_hindices,
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
+            return_relevance_as_y=args.train_only_for_relevance,
+            relevances=relevances,
             **dataset_kwargs,
         )
     else:
@@ -306,12 +315,16 @@ def main():
             train_dataset,
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
+            return_relevance_as_y=args.train_only_for_relevance,
+            relevances=relevances,
             **dataset_kwargs,
         )
         validation_dataset = MAPFGraphDataset(
             validation_dataset,
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
+            return_relevance_as_y=args.train_only_for_relevance,
+            relevances=relevances,
             **dataset_kwargs,
         )
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
@@ -330,21 +343,41 @@ def main():
     oe_grid_configs = []
     oe_hypergraph_indices = []
     oe_target_vecs = None
+    oe_relevances = None
 
-    def multiprocess_run_expert(
-        queue,
-        expert,
-        grid_config,
-        save_termination_state,
-        additional_data_func=None,
-    ):
-        expert_results = run_expert_algorithm(
+    if args.train_only_for_relevance:
+
+        def multiprocess_run_expert(
+            queue,
             expert,
-            grid_config=grid_config,
-            save_termination_state=save_termination_state,
-            additional_data_func=additional_data_func,
-        )
-        queue.put((*expert_results, grid_config))
+            grid_config,
+            save_termination_state,
+            additional_data_func=None,
+        ):
+            expert_results = run_pibt(
+                expert,
+                grid_config=grid_config,
+                save_termination_state=save_termination_state,
+                additional_data_func=additional_data_func,
+            )
+            queue.put((*expert_results, grid_config))
+
+    else:
+
+        def multiprocess_run_expert(
+            queue,
+            expert,
+            grid_config,
+            save_termination_state,
+            additional_data_func=None,
+        ):
+            expert_results = run_expert_algorithm(
+                expert,
+                grid_config=grid_config,
+                save_termination_state=save_termination_state,
+                additional_data_func=additional_data_func,
+            )
+            queue.put((*expert_results, grid_config))
 
     move_results = np.array(grid_config.MOVES)
 
@@ -398,6 +431,8 @@ def main():
                         oe_hypergraph_indices,
                         target_vec=oe_target_vecs,
                         use_target_vec=args.use_target_vec,
+                        return_relevance_as_y=args.train_only_for_relevance,
+                        relevances=oe_relevances,
                         **dataset_kwargs,
                     ),
                     batch_size=args.batch_size,
@@ -408,6 +443,8 @@ def main():
                         oe_graph_dataset,
                         target_vec=oe_target_vecs,
                         use_target_vec=args.use_target_vec,
+                        return_relevance_as_y=args.train_only_for_relevance,
+                        relevances=oe_relevances,
                         **dataset_kwargs,
                     ),
                     batch_size=args.batch_size,
@@ -544,6 +581,7 @@ def main():
 
                 oe_dataset = []
                 oe_hindices = []
+                oe_relevs = []
 
                 for i, graph_id in enumerate(oe_ids):
                     print(f"Running model on {i}/{args.num_run_oe} ", end="")
@@ -612,21 +650,12 @@ def main():
                             expert_results = queue.get()
 
                         if expert_results is not None:
+                            (all_actions, all_observations, all_terminated) = (
+                                expert_results[:3]
+                            )
+                            grid_config = expert_results[-1]
                             if hypergraph_model:
-                                (
-                                    all_actions,
-                                    all_observations,
-                                    all_terminated,
-                                    hindices,
-                                    grid_config,
-                                ) = expert_results
-                            else:
-                                (
-                                    all_actions,
-                                    all_observations,
-                                    all_terminated,
-                                    grid_config,
-                                ) = expert_results
+                                hindices = expert_results[-2]
                             if all(all_terminated[-1]):
                                 print(f"-- Success")
                                 oe_dataset.append(
@@ -634,6 +663,9 @@ def main():
                                 )
                                 oe_hindices.extend(hindices)
                                 oe_grid_configs.append(grid_config)
+                                if args.train_only_for_relevance:
+                                    relevs = expert_results[3]
+                                    oe_relevs.extend(relevs)
                             else:
                                 print(f"-- Fail")
                         else:
@@ -644,21 +676,20 @@ def main():
                     # Popping remaining elements, although no elements should remain
                     expert_results = queue.get()
                     hindices = []
+                    (all_actions, all_observations, all_terminated) = expert_results[:3]
+                    grid_config = expert_results[-1]
                     if hypergraph_model:
-                        (
-                            all_actions,
-                            all_observations,
-                            all_terminated,
-                            hindices,
-                            grid_config,
-                        ) = expert_results
-                    else:
-                        all_actions, all_observations, all_terminated, grid_config = (
-                            expert_results
+                        hindices = expert_results[-2]
+
+                    if all(all_terminated[-1]):
+                        oe_dataset.append(
+                            (all_observations, all_actions, all_terminated)
                         )
-                    oe_dataset.append((all_observations, all_actions, all_terminated))
-                    oe_hindices.extend(hindices)
-                    oe_grid_configs.append(grid_config)
+                        oe_hindices.extend(hindices)
+                        oe_grid_configs.append(grid_config)
+                        if args.train_only_for_relevance:
+                            relevs = expert_results[3]
+                            oe_relevs.extend(relevs)
 
                 if len(oe_dataset) > 0:
                     print(f"Adding {len(oe_dataset)} OE grids to the dataset")
@@ -691,6 +722,16 @@ def main():
                             )
                             for i in range(len(oe_graph_dataset))
                         )
+                    if len(oe_relevs > 0):
+                        oe_relevs = np.concatenate(oe_relevs, axis=0)
+                        oe_relevs = torch.from_numpy(oe_relevs)
+                        if oe_relevances is None:
+                            oe_relevances = oe_relevs
+                        else:
+                            oe_relevances = torch.concatenate(
+                                [oe_relevances, oe_relevs], dim=0
+                            )
+
                 print("Finished Online Expert")
                 print("----------------------")
 
