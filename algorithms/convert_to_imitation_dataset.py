@@ -10,6 +10,7 @@ from run_expert import (
     DATASET_FILE_NAME_KEYS,
     add_expert_dataset_args,
     get_expert_dataset_file_name,
+    get_legacy_expert_dataset_file_name,
 )
 
 
@@ -28,6 +29,8 @@ def get_imitation_dataset_file_name(args):
         if (key == "min_dist") and (dict_args[key] is None):
             continue
         file_name += f"_{key}_{dict_args[key]}"
+    if args.pibt_expert_relevance_training:
+        file_name += "_pibt_relevance"
     if (not load_positions_separately) and use_edge_attr:
         file_name += "_pos"
     file_name = file_name[1:] + ".pkl"
@@ -147,12 +150,24 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    file_name = get_expert_dataset_file_name(args)
-    path = pathlib.Path(f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}")
+    try:
+        file_name = get_expert_dataset_file_name(args)
+        path = pathlib.Path(
+            f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}"
+        )
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "rb") as f:
-        dataset = pickle.load(f)
+        with open(path, "rb") as f:
+            dataset = pickle.load(f)
+    except:
+        print(f"Could not find file: {path}, trying legacy file name.")
+        file_name = get_legacy_expert_dataset_file_name(args)
+        path = pathlib.Path(
+            f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}"
+        )
+
+        with open(path, "rb") as f:
+            dataset = pickle.load(f)
+
     if isinstance(dataset, tuple):
         dataset, seed_mask = dataset
 

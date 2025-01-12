@@ -40,10 +40,25 @@ def add_expert_dataset_args(parser):
         "--save_termination_state", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
-        "--pibt_expert_relevance_training", action=argparse.BooleanOptionalAction, default=False
+        "--pibt_expert_relevance_training",
+        action=argparse.BooleanOptionalAction,
+        default=False,
     )
 
     return parser
+
+
+def get_legacy_expert_dataset_file_name(args):
+    file_name = ""
+    dict_args = vars(args)
+    for key in sorted(DATASET_FILE_NAME_KEYS):
+        if (key == "min_dist") and (dict_args[key] is None):
+            continue
+        file_name += f"_{key}_{dict_args[key]}"
+    if args.pibt_expert_relevance_training:
+        file_name += "_pibt_relevance"
+    file_name = file_name[1:] + ".pkl"
+    return file_name
 
 
 def get_expert_dataset_file_name(args):
@@ -52,10 +67,14 @@ def get_expert_dataset_file_name(args):
     for key in sorted(DATASET_FILE_NAME_KEYS):
         if (key == "min_dist") and (dict_args[key] is None):
             continue
-        file_name += f"_{key}_{dict_args[key]}"
+        if dict_args[key] != DATASET_FILE_NAME_DEFAULT[key]:
+            file_name += f"_{key}_{dict_args[key]}"
     if args.pibt_expert_relevance_training:
-        file_name += "pibt_relevance"
-    file_name = file_name[1:] + ".pkl"
+        file_name += "_pibt_relevance"
+    if len(file_name) > 0:
+        file_name = file_name[1:] + ".pkl"
+    else:
+        file_name = "default.pkl"
     return file_name
 
 
@@ -201,9 +220,7 @@ def main():
 
         print(f"-- Success Rate: {num_success / (i + 1)}")
 
-    print(
-        f"{len(dataset)}/{len(seeds)} samples were successfully added to the dataset"
-    )
+    print(f"{len(dataset)}/{len(seeds)} samples were successfully added to the dataset")
 
     file_name = get_expert_dataset_file_name(args)
     path = pathlib.Path(f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}")
