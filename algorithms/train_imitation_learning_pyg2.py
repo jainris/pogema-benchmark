@@ -151,6 +151,8 @@ def add_training_args(parser):
         default=False,
     )
 
+    parser.add_argument("--weight_decay", type=float, default=1e-5)
+
     return parser
 
 
@@ -201,7 +203,7 @@ def main():
     torch.manual_seed(args.model_seed)
     model, hypergraph_model, dataset_kwargs = get_model(args, device)
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr_start, weight_decay=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr_start, weight_decay=args.weight_decay)
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=args.num_epochs, eta_min=args.lr_end
     )
@@ -298,7 +300,7 @@ def main():
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
-            relevances=relevances,
+            relevances=train_relevances,
             **dataset_kwargs,
         )
         validation_dataset = MAPFHypergraphDataset(
@@ -307,7 +309,7 @@ def main():
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
-            relevances=relevances,
+            relevances=validation_relevances,
             **dataset_kwargs,
         )
     else:
@@ -316,7 +318,7 @@ def main():
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
-            relevances=relevances,
+            relevances=train_relevances,
             **dataset_kwargs,
         )
         validation_dataset = MAPFGraphDataset(
@@ -324,7 +326,7 @@ def main():
             target_vec=target_vecs,
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
-            relevances=relevances,
+            relevances=validation_relevances,
             **dataset_kwargs,
         )
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
