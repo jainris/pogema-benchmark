@@ -16,7 +16,8 @@ class PairwiseLogisticLoss(torch.nn.Module):
         relevance_j = torch.unsqueeze(relevance, dim=-2)
         relevance_diff = relevance_i - relevance_j
 
-        loss = torch.log2(1 + torch.exp(-self.temperature * score_diff))
+        # loss = torch.log2(1 + torch.exp(-self.temperature * score_diff))
+        loss = torch.log1p(torch.exp(-self.temperature * score_diff))
         loss = torch.sum(loss[relevance_diff > 0])
 
         return loss
