@@ -688,7 +688,7 @@ def main():
                                 oe_grid_configs.append(grid_config)
                                 if args.train_only_for_relevance:
                                     relevs = expert_results[3]
-                                    oe_relevs.extend(relevs)
+                                    oe_relevs.append(relevs)
                             else:
                                 print(f"-- Fail")
                         else:
@@ -712,7 +712,7 @@ def main():
                         oe_grid_configs.append(grid_config)
                         if args.train_only_for_relevance:
                             relevs = expert_results[3]
-                            oe_relevs.extend(relevs)
+                            oe_relevs.append(relevs)
 
                 if len(oe_dataset) > 0:
                     print(f"Adding {len(oe_dataset)} OE grids to the dataset")

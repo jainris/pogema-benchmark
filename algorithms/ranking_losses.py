@@ -35,4 +35,6 @@ def calculate_accuracy_for_ranking(y_pred, y_target):
     )
     sorted_y_pred_vals = y_target[batch_ids, y_pred_idx]
 
-    return torch.mean(sorted_y_target_vals == sorted_y_pred_vals, dim=-1)
+    return torch.mean(
+        sorted_y_target_vals == sorted_y_pred_vals, dim=-1, dtype=torch.float
+    )
