@@ -21,3 +21,18 @@ class PairwiseLogisticLoss(torch.nn.Module):
         loss = torch.mean(loss[relevance_diff > 0])
 
         return loss
+
+
+def calculate_accuracy_for_ranking(y_pred, y_target):
+    # y_pred, y_target: [N, C]
+    # Getting the predicted ranking
+    y_pred_idx = torch.argsort(y_pred, descending=True)
+
+    sorted_y_target_vals, _ = torch.sort(y_target, descending=True)
+
+    batch_ids = torch.unsqueeze(
+        torch.arange(y_pred.shape[0], device=y_pred_idx.device), dim=-1
+    )
+    sorted_y_pred_vals = y_target[batch_ids, y_pred_idx]
+
+    return torch.mean(sorted_y_target_vals == sorted_y_pred_vals, dim=-1)

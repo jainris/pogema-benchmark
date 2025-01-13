@@ -42,7 +42,7 @@ from grid_config_generator import (
 )
 from generate_target_vec import get_target_vec_file_name, generate_target_vec
 
-from ranking_losses import PairwiseLogisticLoss
+from ranking_losses import PairwiseLogisticLoss, calculate_accuracy_for_ranking
 from pibt_training import get_expert_algorithm_and_config as get_pibt_alg
 from pibt_training import run_expert_algorithm as run_pibt
 
@@ -203,7 +203,9 @@ def main():
     torch.manual_seed(args.model_seed)
     model, hypergraph_model, dataset_kwargs = get_model(args, device)
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr_start, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(
+        model.parameters(), lr=args.lr_start, weight_decay=args.weight_decay
+    )
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=args.num_epochs, eta_min=args.lr_end
     )
@@ -419,11 +421,18 @@ def main():
             loss.backward()
             optimizer.step()
 
-            target_actions = target_actions.reshape((*out.shape[:-1], -1))
-            target_actions = torch.argmax(out, dim=-1)
-            tot_correct += (
-                torch.sum(torch.argmax(out, dim=-1) == target_actions).detach().cpu()
-            )
+            if args.train_only_for_relevance:
+                tot_correct += (
+                    torch.sum(calculate_accuracy_for_ranking(out, target_actions))
+                    .detach()
+                    .cpu()
+                )
+            else:
+                tot_correct += (
+                    torch.sum(torch.argmax(out, dim=-1) == target_actions)
+                    .detach()
+                    .cpu()
+                )
             num_samples += out.shape[0]
             n_batches += 1
 
@@ -471,13 +480,18 @@ def main():
                 loss.backward()
                 optimizer.step()
 
-                target_actions = target_actions.reshape((*out.shape[:-1], -1))
-                target_actions = torch.argmax(out, dim=-1)
-                tot_correct += (
-                    torch.sum(torch.argmax(out, dim=-1) == target_actions)
-                    .detach()
-                    .cpu()
-                )
+                if args.train_only_for_relevance:
+                    tot_correct += (
+                        torch.sum(calculate_accuracy_for_ranking(out, target_actions))
+                        .detach()
+                        .cpu()
+                    )
+                else:
+                    tot_correct += (
+                        torch.sum(torch.argmax(out, dim=-1) == target_actions)
+                        .detach()
+                        .cpu()
+                    )
                 num_samples += out.shape[0]
                 n_batches += 1
         lr_scheduler.step()
@@ -512,13 +526,18 @@ def main():
                     if not args.train_on_terminated_agents:
                         out = out[~data.terminated]
                         target_actions = target_actions[~data.terminated]
-                    target_actions = target_actions.reshape((*out.shape[:-1], -1))
-                    target_actions = torch.argmax(out, dim=-1)
-                    val_correct += (
-                        torch.sum(torch.argmax(out, dim=-1) == target_actions)
-                        .detach()
-                        .cpu()
-                    )
+                    if args.train_only_for_relevance:
+                        val_correct += (
+                            torch.sum(calculate_accuracy_for_ranking(out, target_actions))
+                            .detach()
+                            .cpu()
+                        )
+                    else:
+                        val_correct += (
+                            torch.sum(torch.argmax(out, dim=-1) == target_actions)
+                            .detach()
+                            .cpu()
+                        )
                     val_samples += out.shape[0]
                 val_accuracy = val_correct / val_samples
                 results = results | {"validation_accuracy": val_accuracy}
@@ -726,7 +745,7 @@ def main():
                             )
                             for i in range(len(oe_graph_dataset))
                         )
-                    if len(oe_relevs > 0):
+                    if len(oe_relevs) > 0:
                         oe_relevs = np.concatenate(oe_relevs, axis=0)
                         oe_relevs = torch.from_numpy(oe_relevs)
                         if oe_relevances is None:
