@@ -701,7 +701,7 @@ def main():
                                 )
                                 oe_hindices.extend(hindices)
                                 oe_grid_configs.append(grid_config)
-                                if args.train_only_for_relevance:
+                                if args.pibt_expert_relevance_training:
                                     relevs = expert_results[3]
                                     oe_relevs.append(relevs)
                             else:
@@ -725,7 +725,7 @@ def main():
                         )
                         oe_hindices.extend(hindices)
                         oe_grid_configs.append(grid_config)
-                        if args.train_only_for_relevance:
+                        if args.pibt_expert_relevance_training:
                             relevs = expert_results[3]
                             oe_relevs.append(relevs)
 
