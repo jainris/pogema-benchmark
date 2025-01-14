@@ -60,6 +60,8 @@ class MAPFGraphDataset(Dataset):
         self.return_relevance_as_y = return_relevance_as_y
         self.relevances = relevances
         self.use_relevances = use_relevances
+        if use_relevances[: len("only-relevance")] == "only-relevance":
+            self.use_relevances = use_relevances[len("only-relevance-") :]
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -142,6 +144,8 @@ class MAPFHypergraphDataset(Dataset):
         self.return_relevance_as_y = return_relevance_as_y
         self.relevances = relevances
         self.use_relevances = use_relevances
+        if use_relevances[: len("only-relevance")] == "only-relevance":
+            self.use_relevances = use_relevances[len("only-relevance-") :]
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
