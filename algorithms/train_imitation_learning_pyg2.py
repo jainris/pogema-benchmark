@@ -360,7 +360,7 @@ def main():
     oe_target_vecs = None
     oe_relevances = None
 
-    if args.train_only_for_relevance:
+    if args.pibt_expert_relevance_training:
 
         def multiprocess_run_expert(
             queue,
