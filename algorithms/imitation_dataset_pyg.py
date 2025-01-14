@@ -194,7 +194,7 @@ class MAPFHypergraphDataset(Dataset):
                 )
                 relevances = relevances.reshape(
                     (relevances.shape[0], relevances.shape[1] * relevances.shape[2])
-                )
+                ).to(torch.float)
             else:
                 raise ValueError(
                     f"Unsupported value for use_relevances: {self.use_relevances}."
