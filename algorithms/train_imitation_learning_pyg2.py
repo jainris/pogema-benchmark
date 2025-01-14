@@ -202,7 +202,7 @@ def main():
 
     grid_config = _grid_config_generator(seeds[0])
 
-    if args.train_only_for_relevance:
+    if args.pibt_expert_relevance_training:
         expert_algorithm, inference_config = get_pibt_alg(args)
     else:
         expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
