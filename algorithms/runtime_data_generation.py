@@ -126,7 +126,9 @@ def get_runtime_data_generator(
 ) -> BaseRuntimeDataGeneration:
     rt_data_generator = BaseRuntimeDataGeneration(hypergraph_model, dataset_kwargs)
 
-    key, generator = get_graph_dataset_generator(args.comm_radius, args.obs_radius)
+    key, generator = get_graph_dataset_generator(
+        args.comm_radius, args.obs_radius, dataset_kwargs
+    )
     rt_data_generator.register_datagenerator(key, generator)
 
     if use_target_vec is not None:

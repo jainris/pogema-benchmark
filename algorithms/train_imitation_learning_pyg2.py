@@ -168,7 +168,12 @@ def main():
     print(args)
 
     assert args.save_termination_state
-    assert (args.use_relevances is None) or (not args.train_only_for_relevance)
+    assert (args.use_relevances is None) or (
+        not args.train_only_for_relevance
+    ), "Can't train for relevance and also use in model."
+    assert (
+        args.use_relevances is None
+    ) or args.pibt_expert_relevance_training, "Need relevance data to use it."
 
     if args.device == -1:
         device = torch.device("cuda")
