@@ -114,7 +114,7 @@ class RelevanceGeneator:
         relevances = get_relevance_from_inverse_relevances(inverse_relevances)
         relevances = torch.from_numpy(relevances)
 
-        return relevances
+        return [relevances]
 
 
 def get_runtime_data_generator(
