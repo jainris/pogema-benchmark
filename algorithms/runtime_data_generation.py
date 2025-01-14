@@ -25,7 +25,7 @@ class BaseRuntimeDataGeneration:
     def register_datagenerator(self, key, generator):
         self.generators[key] = generator
         assert key not in self.keys
-        self.keys += key
+        self.keys.append(key)
 
     def register_params(self, key, value):
         self.additional_kwargs[key] = value
