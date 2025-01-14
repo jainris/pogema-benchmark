@@ -126,18 +126,18 @@ def get_runtime_data_generator(
 ) -> BaseRuntimeDataGeneration:
     rt_data_generator = BaseRuntimeDataGeneration(hypergraph_model, dataset_kwargs)
 
-    key, generator = get_graph_dataset_generator(
+    generator, key = get_graph_dataset_generator(
         args.comm_radius, args.obs_radius, dataset_kwargs
     )
     rt_data_generator.register_datagenerator(key, generator)
 
     if use_target_vec is not None:
-        key, generator = get_target_vec_generator()
+        generator, key = get_target_vec_generator()
         rt_data_generator.register_datagenerator(key, generator)
         rt_data_generator.register_params("use_target_vec", use_target_vec)
 
     if hypergraph_model:
-        key, generator = get_hyperindices_generator(
+        generator, key = get_hyperindices_generator(
             hypergraph_greedy_distance=args.hypergraph_greedy_distance,
             hypergraph_num_steps=args.hypergraph_num_steps,
             move_results=np.array(grid_config.MOVES),
@@ -146,9 +146,9 @@ def get_runtime_data_generator(
         rt_data_generator.register_datagenerator(key, generator)
 
     if args.use_relevances is not None:
-        key, generator = "relevances", RelevanceGeneator(
-            moves=np.array(grid_config.MOVES)
-        )
+        key = "relevances"
+        generator = RelevanceGeneator(moves=np.array(grid_config.MOVES))
+
         rt_data_generator.register_datagenerator(key, generator)
         rt_data_generator.register_params("use_relevances", args.use_relevances)
 

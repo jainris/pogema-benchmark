@@ -539,7 +539,7 @@ def get_gnn_input_processor(use_target_vec, use_relevances, input_size):
         relevance_option = use_relevances
         if use_relevances[: len("only-relevance")] == "only-relevance":
             only_relevance = True
-            relevance_option = use_relevances[len("only-relevance") :]
+            relevance_option = use_relevances[len("only-relevance-") :]
 
         if relevance_option == "straight":
             output_size += 5
