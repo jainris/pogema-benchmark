@@ -156,20 +156,24 @@ def get_expert_algorithm_and_config(args):
     return expert_algorithm, inference_config
 
 
+def get_relevance_from_inverse_relevances(inverse_relevance):
+    max_dists = np.max(inverse_relevance, keepdims=True, axis=-1)
+
+    # Adding 1 to max_dists, so that relevance for max dist cell is 1,
+    # as 0 is reserved for invalid moves
+    max_dists = max_dists + 1
+    invalid_moves = inverse_relevance < 0
+
+    relevance = max_dists - inverse_relevance
+    relevance[invalid_moves] = 0
+
+    return relevance
+
+
 def get_relevance_from_expert(expert_algorithm):
     if isinstance(expert_algorithm, PIBTInference):
         inverse_relevance = np.stack(expert_algorithm.pibt_expert.saved_data, axis=0)
-        max_dists = np.max(inverse_relevance, keepdims=True, axis=-1)
-
-        # Adding 1 to max_dists, so that relevance for max dist cell is 1,
-        # as 0 is reserved for invalid moves
-        max_dists = max_dists + 1
-        invalid_moves = inverse_relevance < 0
-
-        relevance = max_dists - inverse_relevance
-        relevance[invalid_moves] = 0
-
-        return relevance
+        return get_relevance_from_inverse_relevances(inverse_relevance)
     else:
         raise ValueError(
             f"Unsupported expert_algorithm type: {type(expert_algorithm)}."

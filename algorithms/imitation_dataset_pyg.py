@@ -1,4 +1,3 @@
-import numpy as np
 from tqdm import tqdm
 
 import torch
@@ -45,6 +44,7 @@ class MAPFGraphDataset(Dataset):
         use_target_vec=None,
         return_relevance_as_y=False,
         relevances=None,
+        use_relevances=None,
     ) -> None:
         (
             self.dataset_node_features,
@@ -59,6 +59,7 @@ class MAPFGraphDataset(Dataset):
         self.use_target_vec = use_target_vec
         self.return_relevance_as_y = return_relevance_as_y
         self.relevances = relevances
+        self.use_relevances = use_relevances
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -82,9 +83,23 @@ class MAPFGraphDataset(Dataset):
         if self.return_relevance_as_y:
             extra_kwargs = extra_kwargs | {"original_y": y}
             y = self.relevances[index]
-        else:
-            if self.relevances is not None:
-                extra_kwargs = extra_kwargs | {"relevances": self.relevances[index]}
+        if self.use_relevances is not None:
+            if self.use_relevances == "straight":
+                relevances = self.relevances[index]
+            elif self.use_relevances == "one-hot":
+                relevances = self.relevances[index]
+                relevances = torch.argsort(relevances, dim=-1, descending=True)
+                relevances = torch.nn.functional.one_hot(
+                    relevances, num_classes=relevances.shape[-1]
+                )
+                relevances = relevances.reshape(
+                    (relevances.shape[0], relevances.shape[1] * relevances.shape[2])
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported value for use_relevances: {self.use_relevances}."
+                )
+            extra_kwargs = extra_kwargs | {"relevances": relevances}
         return Data(
             x=self.dataset_node_features[index],
             edge_index=edge_index,
@@ -108,6 +123,7 @@ class MAPFHypergraphDataset(Dataset):
         use_target_vec=None,
         return_relevance_as_y=False,
         relevances=None,
+        use_relevances=None,
     ) -> None:
         (
             self.dataset_node_features,
@@ -125,6 +141,7 @@ class MAPFHypergraphDataset(Dataset):
         self.use_target_vec = use_target_vec
         self.return_relevance_as_y = return_relevance_as_y
         self.relevances = relevances
+        self.use_relevances = use_relevances
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -162,9 +179,23 @@ class MAPFHypergraphDataset(Dataset):
         if self.return_relevance_as_y:
             extra_kwargs = extra_kwargs | {"original_y": y}
             y = self.relevances[index]
-        else:
-            if self.relevances is not None:
-                extra_kwargs = extra_kwargs | {"relevances": self.relevances[index]}
+        if self.use_relevances is not None:
+            if self.use_relevances == "straight":
+                relevances = self.relevances[index]
+            elif self.use_relevances == "one-hot":
+                relevances = self.relevances[index]
+                relevances = torch.argsort(relevances, dim=-1, descending=True)
+                relevances = torch.nn.functional.one_hot(
+                    relevances, num_classes=relevances.shape[-1]
+                )
+                relevances = relevances.reshape(
+                    (relevances.shape[0], relevances.shape[1] * relevances.shape[2])
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported value for use_relevances: {self.use_relevances}."
+                )
+            extra_kwargs = extra_kwargs | {"relevances": relevances}
         return Data(
             x=self.dataset_node_features[index],
             edge_index=torch.LongTensor(self.hyperedge_indices[index]),

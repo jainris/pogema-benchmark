@@ -1,6 +1,5 @@
 from typing import Sequence
 from collections import OrderedDict
-import numpy as np
 import math
 
 from pogema import pogema_v0
@@ -10,10 +9,7 @@ import torch.nn.functional as F
 
 from torch_geometric.nn import GATConv, GATv2Conv, HypergraphConv
 
-from convert_to_imitation_dataset import generate_graph_dataset
-from generate_hypergraphs import generate_hypergraph_indices
-from generate_target_vec import generate_target_vec
-from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
+from runtime_data_generation import get_runtime_data_generator
 from collision_shielding import get_collision_shielded_model
 from gnn_magat_pyg import MAGATAdditiveConv, MAGATAdditiveConv2
 from gnn_magat_pyg import MAGATMultiplicativeConv, MAGATMultiplicativeConv2
@@ -525,22 +521,51 @@ class ResNetLarge_withMLP(torch.nn.Module):
         return x
 
 
-def get_gnn_input_processor(use_target_vec, input_size):
-    def _use_target_vec_processor(x, data):
-        return torch.concatenate([x, data.target_vec], dim=-1)
+def get_gnn_input_processor(use_target_vec, use_relevances, input_size):
+    aux_data = []
+    output_size = input_size
 
-    if use_target_vec is None:
+    if use_target_vec is not None:
+        aux_data += ["target_vec"]
+        if use_target_vec == "target-vec":
+            output_size += 2
+        elif use_target_vec == "target-vec+dist":
+            output_size += 3
+        else:
+            raise ValueError(f"Unsupported value for use_target_vec: {use_target_vec}.")
+    if use_relevances is not None:
+        aux_data += ["relevances"]
+        only_relevance = False
+        relevance_option = use_relevances
+        if use_relevances[: len("only-relevance")] == "only-relevance":
+            only_relevance = True
+            relevance_option = use_relevances[len("only-relevance") :]
+
+        if relevance_option == "straight":
+            output_size += 5
+        elif relevance_option == "one-hot":
+            output_size += 5 * 5
+        else:
+            raise ValueError(f"Unsupported value for use_relevances: {use_relevances}.")
+
+        if only_relevance:
+
+            def _processor(x, data):
+                return torch.concatenate([data[key] for key in aux_data], dim=-1)
+
+            return _processor, output_size - input_size
+
+    if len(aux_data) == 0:
 
         def _processor(x, data):
             return x
 
         return _processor, input_size
-    elif use_target_vec == "target-vec":
-        return _use_target_vec_processor, input_size + 2
-    elif use_target_vec == "target-vec+dist":
-        return _use_target_vec_processor, input_size + 3
-    else:
-        raise ValueError(f"Unsupported value for use_target_vec: {use_target_vec}.")
+
+    def _processor(x, data):
+        return torch.concatenate([x] + [data[key] for key in aux_data], dim=-1)
+
+    return _processor, output_size
 
 
 class DecentralPlannerGATNet(torch.nn.Module):
@@ -564,6 +589,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         edge_dim=None,
         model_residuals=None,
         use_target_vec=None,
+        use_relevances=None,
     ):
         super().__init__()
 
@@ -606,7 +632,9 @@ class DecentralPlannerGATNet(torch.nn.Module):
             )
 
         self.gnn_pre_processor, self.numFeatures2Share = get_gnn_input_processor(
-            use_target_vec=use_target_vec, input_size=cnn_output_size
+            use_target_vec=use_target_vec,
+            use_relevances=use_relevances,
+            input_size=cnn_output_size,
         )
 
         #####################################################################
@@ -724,6 +752,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         cnn_mode="basic-CNN",
         cnn_output_size=None,
         use_target_vec=None,
+        use_relevances=None,
     ):
         super().__init__()
 
@@ -754,7 +783,9 @@ class AgentWithTwoNetworks(torch.nn.Module):
             self.cnn = ResNetLarge_withMLP(cnn_output_size)
 
         self.gnn_pre_processor, self.numFeatures2Share = get_gnn_input_processor(
-            use_target_vec=use_target_vec, input_size=cnn_output_size
+            use_target_vec=use_target_vec,
+            use_relevances=use_relevances,
+            input_size=cnn_output_size,
         )
 
         #####################################################################
@@ -932,54 +963,22 @@ def run_model_on_grid(
 ):
     env = pogema_v0(grid_config=grid_config)
     observations, infos = env.reset()
-    move_results = np.array(grid_config.MOVES)
 
     if aux_func is not None:
         aux_func(env=env, observations=observations, actions=None)
 
     model = get_collision_shielded_model(model, env, args)
 
-    while True:
-        gdata = generate_graph_dataset(
-            dataset=[[[observations], [0], [0]]],
-            comm_radius=args.comm_radius,
-            obs_radius=args.obs_radius,
-            num_samples=None,
-            save_termination_state=True,
-            use_edge_attr=dataset_kwargs["use_edge_attr"],
-            print_prefix=None,
-        )
-        target_vec = None
-        if use_target_vec is not None:
-            target_vec = generate_target_vec(
-                dataset=[[[observations], [0], [0]]],
-                num_samples=None,
-                print_prefix=None,
-            )
-        if hypergraph_model:
-            hindex = generate_hypergraph_indices(
-                env,
-                args.hypergraph_greedy_distance,
-                args.hypergraph_num_steps,
-                move_results,
-                args.generate_graph_from_hyperedges,
-            )
-            gdata = MAPFHypergraphDataset(
-                gdata,
-                [hindex],
-                target_vec=target_vec,
-                use_target_vec=use_target_vec,
-                **dataset_kwargs,
-            )[0]
-        else:
-            gdata = MAPFGraphDataset(
-                gdata,
-                target_vec=target_vec,
-                use_target_vec=use_target_vec,
-                **dataset_kwargs,
-            )[0]
+    rt_data_generator = get_runtime_data_generator(
+        grid_config=grid_config,
+        args=args,
+        hypergraph_model=hypergraph_model,
+        dataset_kwargs=dataset_kwargs,
+        use_target_vec=use_target_vec,
+    )
 
-        gdata.to(device)
+    while True:
+        gdata = rt_data_generator(observations, env).to(device)
 
         actions = model.get_actions(gdata)
         observations, rewards, terminated, truncated, infos = env.step(actions)
@@ -1165,6 +1164,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         use_dropout=True,
         concat_attention=True,
         num_classes=5,
+        use_relevances=args.use_relevances,
     )
     dict_args = vars(args)
     if args.agent_network_type == "single":

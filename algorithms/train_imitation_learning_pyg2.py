@@ -152,6 +152,7 @@ def add_training_args(parser):
     )
 
     parser.add_argument("--weight_decay", type=float, default=1e-5)
+    parser.add_argument("--use_relevances", type=str, default=None)
 
     return parser
 
@@ -167,6 +168,7 @@ def main():
     print(args)
 
     assert args.save_termination_state
+    assert (args.use_relevances is None) or (not args.train_only_for_relevance)
 
     if args.device == -1:
         device = torch.device("cuda")
@@ -303,6 +305,7 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=train_relevances,
+            use_relevances=args.use_relevances,
             **dataset_kwargs,
         )
         validation_dataset = MAPFHypergraphDataset(
@@ -312,6 +315,7 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=validation_relevances,
+            use_relevances=args.use_relevances,
             **dataset_kwargs,
         )
     else:
@@ -321,6 +325,7 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=train_relevances,
+            use_relevances=args.use_relevances,
             **dataset_kwargs,
         )
         validation_dataset = MAPFGraphDataset(
@@ -329,6 +334,7 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=validation_relevances,
+            use_relevances=args.use_relevances,
             **dataset_kwargs,
         )
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
@@ -446,6 +452,7 @@ def main():
                         use_target_vec=args.use_target_vec,
                         return_relevance_as_y=args.train_only_for_relevance,
                         relevances=oe_relevances,
+                        use_relevances=args.use_relevances,
                         **dataset_kwargs,
                     ),
                     batch_size=args.batch_size,
@@ -458,6 +465,7 @@ def main():
                         use_target_vec=args.use_target_vec,
                         return_relevance_as_y=args.train_only_for_relevance,
                         relevances=oe_relevances,
+                        use_relevances=args.use_relevances,
                         **dataset_kwargs,
                     ),
                     batch_size=args.batch_size,
@@ -528,7 +536,9 @@ def main():
                         target_actions = target_actions[~data.terminated]
                     if args.train_only_for_relevance:
                         val_correct += (
-                            torch.sum(calculate_accuracy_for_ranking(out, target_actions))
+                            torch.sum(
+                                calculate_accuracy_for_ranking(out, target_actions)
+                            )
                             .detach()
                             .cpu()
                         )
