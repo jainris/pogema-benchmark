@@ -1661,6 +1661,7 @@ class BipartiteGCNConv(MessagePassing):
         edge_weight: OptTensor = None,
         edge_attr: OptTensor = None,
     ) -> Tensor:
+        # propagate_type: (x: Tensor, edge_weight: Optional[Tensor], edge_attr: Optional[Tensor])
         x_src, x_dst = x
         x_src = self.lin(x_src)
         x = x_src, x_dst
@@ -1669,7 +1670,6 @@ class BipartiteGCNConv(MessagePassing):
             assert self.lin_edge is not None
             edge_attr = self.lin_edge(edge_attr)
 
-        # propagate_type: (x: Tensor, edge_weight: OptTensor)
         out = self.propagate(
             edge_index, x=x, edge_weight=edge_weight, edge_attr=edge_attr
         )
