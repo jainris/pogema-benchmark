@@ -154,6 +154,9 @@ def add_training_args(parser):
     parser.add_argument("--weight_decay", type=float, default=1e-5)
     parser.add_argument("--use_relevances", type=str, default=None)
     parser.add_argument("--edge_attr_opts", type=str, default="straight")
+    parser.add_argument("--pre_gnn_embedding_size", type=int, default=None)
+    parser.add_argument("--pre_gnn_num_mlp_layers", type=int, default=None)
+
 
     return parser
 
@@ -313,7 +316,7 @@ def main():
             relevances=train_relevances,
             use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
-**dataset_kwargs,
+            **dataset_kwargs,
         )
         validation_dataset = MAPFHypergraphDataset(
             validation_dataset,
@@ -324,7 +327,7 @@ def main():
             relevances=validation_relevances,
             use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
-**dataset_kwargs,
+            **dataset_kwargs,
         )
     else:
         train_dataset = MAPFGraphDataset(
@@ -335,7 +338,7 @@ def main():
             relevances=train_relevances,
             use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
-**dataset_kwargs,
+            **dataset_kwargs,
         )
         validation_dataset = MAPFGraphDataset(
             validation_dataset,
@@ -345,7 +348,7 @@ def main():
             relevances=validation_relevances,
             use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
-**dataset_kwargs,
+            **dataset_kwargs,
         )
     train_dl = DataLoader(train_dataset, batch_size=args.batch_size)
     validation_dl = DataLoader(validation_dataset, batch_size=args.batch_size)
@@ -464,7 +467,7 @@ def main():
                         relevances=oe_relevances,
                         use_relevances=args.use_relevances,
                         edge_attr_opts=args.edge_attr_opts,
-**dataset_kwargs,
+                        **dataset_kwargs,
                     ),
                     batch_size=args.batch_size,
                 )
@@ -478,7 +481,7 @@ def main():
                         relevances=oe_relevances,
                         use_relevances=args.use_relevances,
                         edge_attr_opts=args.edge_attr_opts,
-**dataset_kwargs,
+                        **dataset_kwargs,
                     ),
                     batch_size=args.batch_size,
                 )

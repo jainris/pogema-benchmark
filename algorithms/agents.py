@@ -521,7 +521,7 @@ class ResNetLarge_withMLP(torch.nn.Module):
         return x
 
 
-def get_gnn_input_processor(use_target_vec, use_relevances, input_size):
+def get_gnn_input_pre_processor(use_target_vec, use_relevances, input_size):
     aux_data = []
     output_size = input_size
 
@@ -568,6 +568,70 @@ def get_gnn_input_processor(use_target_vec, use_relevances, input_size):
     return _processor, output_size
 
 
+class GNNInputProcessor(torch.nn.Module):
+    def __init__(
+        self,
+        use_target_vec,
+        use_relevances,
+        input_size,
+        pre_gnn_embedding_size,
+        pre_gnn_num_mlp_layers,
+    ):
+        super().__init__()
+        self.preprocessor, intmd_sz = get_gnn_input_pre_processor(
+            use_target_vec=use_target_vec,
+            use_relevances=use_relevances,
+            input_size=input_size,
+        )
+
+        if (pre_gnn_num_mlp_layers is None) or (pre_gnn_num_mlp_layers < 1):
+            self.processor = None
+            self.output_sz = intmd_sz
+        else:
+            if pre_gnn_embedding_size is None:
+                # No value given, taking intmd_sz
+                pre_gnn_embedding_size = intmd_sz
+            mlp = [torch.nn.Linear(intmd_sz, pre_gnn_embedding_size)] + [
+                torch.nn.Linear(pre_gnn_embedding_size, pre_gnn_embedding_size)
+                for _ in range(pre_gnn_num_mlp_layers - 1)
+            ]
+            self.processor = torch.nn.ModuleList(mlp)
+            self.output_sz = pre_gnn_embedding_size
+
+    def get_output_size(self):
+        return self.output_sz
+
+    def reset_parameters(self):
+        if self.processor is not None:
+            for lin in self.processor:
+                lin.reset_parameters()
+
+    def forward(self, x, data):
+        x = self.preprocessor(x, data)
+        if self.processor is not None:
+            for lin in self.processor:
+                x = lin(x)
+                x = torch.nn.functional.relu(x)
+        return x
+
+
+def get_gnn_input_processor(
+    use_target_vec,
+    use_relevances,
+    input_size,
+    pre_gnn_embedding_size,
+    pre_gnn_num_mlp_layers,
+) -> tuple[GNNInputProcessor, int]:
+    module = GNNInputProcessor(
+        use_target_vec=use_target_vec,
+        use_relevances=use_relevances,
+        input_size=input_size,
+        pre_gnn_embedding_size=pre_gnn_embedding_size,
+        pre_gnn_num_mlp_layers=pre_gnn_num_mlp_layers,
+    )
+    return module, module.get_output_size()
+
+
 class DecentralPlannerGATNet(torch.nn.Module):
     def __init__(
         self,
@@ -590,6 +654,8 @@ class DecentralPlannerGATNet(torch.nn.Module):
         model_residuals=None,
         use_target_vec=None,
         use_relevances=None,
+        pre_gnn_embedding_size=None,
+        pre_gnn_num_mlp_layers=None,
     ):
         super().__init__()
 
@@ -635,6 +701,8 @@ class DecentralPlannerGATNet(torch.nn.Module):
             use_target_vec=use_target_vec,
             use_relevances=use_relevances,
             input_size=cnn_output_size,
+            pre_gnn_embedding_size=pre_gnn_embedding_size,
+            pre_gnn_num_mlp_layers=pre_gnn_num_mlp_layers,
         )
 
         #####################################################################
@@ -716,6 +784,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
 
     def reset_parameters(self):
         self.cnn.reset_parameters()
+        self.gnn_pre_processor.reset_parameters()
         for gnn in self.gnns:
             gnn.reset_parameters()
         for lin in self.actionsMLP:
@@ -753,6 +822,8 @@ class AgentWithTwoNetworks(torch.nn.Module):
         cnn_output_size=None,
         use_target_vec=None,
         use_relevances=None,
+        pre_gnn_embedding_size=None,
+        pre_gnn_num_mlp_layers=None,
     ):
         super().__init__()
 
@@ -786,6 +857,8 @@ class AgentWithTwoNetworks(torch.nn.Module):
             use_target_vec=use_target_vec,
             use_relevances=use_relevances,
             input_size=cnn_output_size,
+            pre_gnn_embedding_size=pre_gnn_embedding_size,
+            pre_gnn_num_mlp_layers=pre_gnn_num_mlp_layers,
         )
 
         #####################################################################
@@ -911,6 +984,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
 
     def reset_parameters(self):
         self.cnn.reset_parameters()
+        self.gnn_pre_processor.reset_parameters()
         for gnn in self.gnns1:
             gnn.reset_parameters()
         for gnn in self.gnns2:
@@ -1165,6 +1239,8 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         concat_attention=True,
         num_classes=5,
         use_relevances=args.use_relevances,
+        pre_gnn_embedding_size=args.pre_gnn_embedding_size,
+        pre_gnn_num_mlp_layers=args.pre_gnn_num_mlp_layers,
     )
     dict_args = vars(args)
     if args.agent_network_type == "single":
