@@ -77,6 +77,7 @@ class MAPFGraphDataset(Dataset):
         if self.use_edge_attr:
             agent_pos = self.dataset_agent_pos[index]
             edge_attr = agent_pos[edge_index[0]] - agent_pos[edge_index[1]]
+            edge_attr = edge_attr.to(torch.float)
             if self.edge_attr_opts == "dist":
                 dist = torch.norm(edge_attr, keepdim=True, dim=-1)
                 edge_attr = torch.concatenate([edge_attr, dist], dim=-1)
@@ -183,6 +184,7 @@ class MAPFHypergraphDataset(Dataset):
                     self.dataset_Adj[index]
                 )
             edge_attr = agent_pos[graph_edge_index[0]] - agent_pos[graph_edge_index[1]]
+            edge_attr = edge_attr.to(torch.float)
             if self.edge_attr_opts == "dist":
                 dist = torch.norm(edge_attr, keepdim=True, dim=-1)
                 edge_attr = torch.concatenate([edge_attr, dist], dim=-1)
