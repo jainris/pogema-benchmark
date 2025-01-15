@@ -45,6 +45,7 @@ class MAPFGraphDataset(Dataset):
         return_relevance_as_y=False,
         relevances=None,
         use_relevances=None,
+        edge_attr_opts="straight",
     ) -> None:
         (
             self.dataset_node_features,
@@ -55,6 +56,7 @@ class MAPFGraphDataset(Dataset):
             self.dataset_agent_pos,
         ) = decode_dense_dataset(dense_dataset, use_edge_attr)
         self.use_edge_attr = use_edge_attr
+        self.edge_attr_opts = edge_attr_opts
         self.target_vec = target_vec
         self.use_target_vec = use_target_vec
         self.return_relevance_as_y = return_relevance_as_y
@@ -75,6 +77,13 @@ class MAPFGraphDataset(Dataset):
         if self.use_edge_attr:
             agent_pos = self.dataset_agent_pos[index]
             edge_attr = agent_pos[edge_index[0]] - agent_pos[edge_index[1]]
+            if self.edge_attr_opts == "dist":
+                dist = torch.norm(edge_attr, keepdim=True, dim=-1)
+                edge_attr = torch.concatenate([edge_attr, dist], dim=-1)
+            elif self.edge_attr_opts == "only-dist":
+                edge_attr = torch.norm(edge_attr, keepdim=True, dim=-1)
+            elif self.edge_attr_opts != "straight":
+                raise ValueError(f"Unsupport edge_attr_opts: {self.edge_attr_opts}.")
         if self.use_target_vec is not None:
             target_vec = self.target_vec[index].to(torch.float)
             if self.use_target_vec == "target-vec+dist":
@@ -126,6 +135,7 @@ class MAPFHypergraphDataset(Dataset):
         return_relevance_as_y=False,
         relevances=None,
         use_relevances=None,
+        edge_attr_opts="straight",
     ) -> None:
         (
             self.dataset_node_features,
@@ -139,6 +149,7 @@ class MAPFHypergraphDataset(Dataset):
         self.store_graph_indices = store_graph_indices
         self.use_edge_attr = use_edge_attr
         self.use_graph_edge_attr = use_graph_edge_attr
+        self.edge_attr_opts = edge_attr_opts
         self.target_vec = target_vec
         self.use_target_vec = use_target_vec
         self.return_relevance_as_y = return_relevance_as_y
@@ -172,6 +183,13 @@ class MAPFHypergraphDataset(Dataset):
                     self.dataset_Adj[index]
                 )
             edge_attr = agent_pos[graph_edge_index[0]] - agent_pos[graph_edge_index[1]]
+            if self.edge_attr_opts == "dist":
+                dist = torch.norm(edge_attr, keepdim=True, dim=-1)
+                edge_attr = torch.concatenate([edge_attr, dist], dim=-1)
+            elif self.edge_attr_opts == "only-dist":
+                edge_attr = torch.norm(edge_attr, keepdim=True, dim=-1)
+            elif self.edge_attr_opts != "straight":
+                raise ValueError(f"Unsupport edge_attr_opts: {self.edge_attr_opts}.")
             extra_kwargs = extra_kwargs | {"graph_edge_attr": edge_attr}
         if self.use_target_vec is not None:
             target_vec = self.target_vec[index].to(torch.float)

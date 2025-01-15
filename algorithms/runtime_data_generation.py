@@ -14,7 +14,7 @@ from pibt_training import get_relevance_from_inverse_relevances
 
 
 class BaseRuntimeDataGeneration:
-    def __init__(self, hypergraph_model: bool, additional_kwargs: dict = dict()):
+    def __init__(self, hypergraph_model: bool, **additional_kwargs):
         self.hypergraph_model = hypergraph_model
         self.generators = dict()
         # Storing key separately to maintain order
@@ -124,7 +124,9 @@ def get_runtime_data_generator(
     dataset_kwargs,
     use_target_vec,
 ) -> BaseRuntimeDataGeneration:
-    rt_data_generator = BaseRuntimeDataGeneration(hypergraph_model, dataset_kwargs)
+    rt_data_generator = BaseRuntimeDataGeneration(
+        hypergraph_model, edge_attr_opts=args.edge_attr_opts, **dataset_kwargs
+    )
 
     generator, key = get_graph_dataset_generator(
         args.comm_radius, args.obs_radius, dataset_kwargs
