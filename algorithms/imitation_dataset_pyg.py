@@ -2,7 +2,7 @@ from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset
-from torch_geometric.utils import dense_to_sparse
+from torch_geometric.utils import dense_to_sparse, scatter
 from torch_geometric.data import Data
 
 
@@ -168,7 +168,20 @@ class MAPFHypergraphDataset(Dataset):
         y = self.dataset_target_actions[index]
 
         if self.use_edge_attr:
-            raise NotImplementedError("Yet to implement")
+            agent_pos = self.dataset_agent_pos[index]
+            src, dst = torch.LongTensor(self.hyperedge_indices[index])
+
+            hyperedge_pos = scatter(src=agent_pos[src], index=dst, dim=0, reduce="mean")
+            edge_attr = hyperedge_pos[dst] - agent_pos[src]
+            edge_attr = edge_attr.to(torch.float)
+            if self.edge_attr_opts == "dist":
+                dist = torch.norm(edge_attr, keepdim=True, dim=-1)
+                edge_attr = torch.concatenate([edge_attr, dist], dim=-1)
+            elif self.edge_attr_opts == "only-dist":
+                edge_attr = torch.norm(edge_attr, keepdim=True, dim=-1)
+            elif self.edge_attr_opts != "straight":
+                raise ValueError(f"Unsupport edge_attr_opts: {self.edge_attr_opts}.")
+            extra_kwargs = extra_kwargs | {"edge_attr": edge_attr}
         if self.store_graph_indices:
             graph_edge_index, graph_edge_weight = dense_to_sparse(
                 self.dataset_Adj[index]

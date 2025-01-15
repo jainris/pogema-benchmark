@@ -1601,6 +1601,7 @@ class BipartiteGCNConv(MessagePassing):
         normalize: bool = True,
         bias: bool = True,
         post_relu: bool = False,
+        edge_dim: Optional[int] = None,
         **kwargs,
     ):
         kwargs.setdefault("aggr", "add")
@@ -1637,22 +1638,41 @@ class BipartiteGCNConv(MessagePassing):
         else:
             self.register_parameter("bias", None)
 
+        if edge_dim is not None:
+            self.lin_edge = Linear(
+                edge_dim, out_channels, bias=False, weight_initializer="glorot"
+            )
+        else:
+            self.lin_edge = None
+
         self.reset_parameters()
 
     def reset_parameters(self):
         super().reset_parameters()
         self.lin.reset_parameters()
+        if self.lin_edge is not None:
+            self.lin_edge.reset_parameters()
         zeros(self.bias)
 
     def forward(
-        self, x: OptPairTensor, edge_index: Adj, edge_weight: OptTensor = None
+        self,
+        x: OptPairTensor,
+        edge_index: Adj,
+        edge_weight: OptTensor = None,
+        edge_attr: OptTensor = None,
     ) -> Tensor:
         x_src, x_dst = x
         x_src = self.lin(x_src)
         x = x_src, x_dst
 
+        if edge_attr is not None:
+            assert self.lin_edge is not None
+            edge_attr = self.lin_edge(edge_attr)
+
         # propagate_type: (x: Tensor, edge_weight: OptTensor)
-        out = self.propagate(edge_index, x=x, edge_weight=edge_weight)
+        out = self.propagate(
+            edge_index, x=x, edge_weight=edge_weight, edge_attr=edge_attr
+        )
 
         if self.bias is not None:
             out = out + self.bias
@@ -1662,8 +1682,11 @@ class BipartiteGCNConv(MessagePassing):
 
         return out
 
-    def message(self, x_j: Tensor, edge_weight: OptTensor) -> Tensor:
-        return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
+    def message(
+        self, x_j: Tensor, edge_weight: OptTensor, edge_attr: OptTensor
+    ) -> Tensor:
+        msg = x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
+        return msg if edge_attr is None else edge_attr + msg
 
 
 class BaseHypergraph(torch.nn.Module):
@@ -1671,6 +1694,7 @@ class BaseHypergraph(torch.nn.Module):
         self,
         in_channels,
         out_channels,
+        edge_dim=None,
         hyperedge_feature_generator="gcn",
     ):
         super().__init__()
@@ -1688,6 +1712,7 @@ class BaseHypergraph(torch.nn.Module):
                 out_channels=in_channels,
                 add_self_loops=False,
                 normalize=False,
+                edge_dim=edge_dim,
             )
         elif hyperedge_feature_generator == "bgcn-relu":
             self.bipartite_hyperedge_feature_generator = True
@@ -1697,13 +1722,14 @@ class BaseHypergraph(torch.nn.Module):
                 add_self_loops=False,
                 normalize=False,
                 post_relu=True,
+                edge_dim=edge_dim,
             )
         else:
             raise ValueError(
                 f"{hyperedge_feature_generator} Hyperedge Feature Generator not supported."
             )
 
-    def generate_hyperedge_features(self, x, edge_index):
+    def generate_hyperedge_features(self, x, edge_index, edge_attr=None):
         if self.bipartite_hyperedge_feature_generator:
             if edge_index.shape[1] > 0:
                 num_hyperedges = torch.max(edge_index, dim=-1)[0][1] + 1
@@ -1711,7 +1737,9 @@ class BaseHypergraph(torch.nn.Module):
                     (num_hyperedges, self.in_channels), dtype=x.dtype, device=x.device
                 )
                 hyperedge_attr = self.hyperedge_feature_generator(
-                    (x, hyperedge_attr), edge_index
+                    (x, hyperedge_attr),
+                    edge_index,
+                    edge_attr=edge_attr,
                 )
             else:
                 hyperedge_attr = torch.zeros(
@@ -1808,6 +1836,7 @@ class HMAGAT3(BaseHypergraph):
         self,
         in_channels,
         out_channels,
+        edge_dim=None,
         heads=1,
         hyperedge_feature_generator="gcn",
         residual=True,
@@ -1815,6 +1844,7 @@ class HMAGAT3(BaseHypergraph):
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
+            edge_dim=edge_dim,
             hyperedge_feature_generator=hyperedge_feature_generator,
         )
         self.in_channels = in_channels
@@ -1830,6 +1860,7 @@ class HMAGAT3(BaseHypergraph):
                 out_channels=out_channels,
                 heads=heads,
                 add_self_loops=False,
+                edge_dim=edge_dim,
                 residual=residual,
             )
         else:
@@ -1841,10 +1872,12 @@ class HMAGAT3(BaseHypergraph):
                 residual=residual,
             )
 
-    def forward(self, x, edge_index):
-        hyperedge_attr = self.generate_hyperedge_features(x, edge_index)
+    def forward(self, x, edge_index, edge_attr=None):
+        hyperedge_attr = self.generate_hyperedge_features(
+            x, edge_index, edge_attr=edge_attr
+        )
         edge_index = edge_index[[1, 0]]
-        return self.conv((hyperedge_attr, x), edge_index)
+        return self.conv((hyperedge_attr, x), edge_index, edge_attr=edge_attr)
 
 
 class HGATv2(BaseHypergraph):
@@ -1852,6 +1885,7 @@ class HGATv2(BaseHypergraph):
         self,
         in_channels,
         out_channels,
+        edge_dim=None,
         heads=1,
         hyperedge_feature_generator="gcn",
         residual=True,
@@ -1859,6 +1893,7 @@ class HGATv2(BaseHypergraph):
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
+            edge_dim=edge_dim,
             hyperedge_feature_generator=hyperedge_feature_generator,
         )
         self.in_channels = in_channels
@@ -1874,6 +1909,7 @@ class HGATv2(BaseHypergraph):
                 out_channels=out_channels,
                 heads=heads,
                 add_self_loops=False,
+                edge_dim=edge_dim,
                 residual=residual,
             )
         else:
@@ -1885,7 +1921,9 @@ class HGATv2(BaseHypergraph):
                 residual=residual,
             )
 
-    def forward(self, x, edge_index):
-        hyperedge_attr = self.generate_hyperedge_features(x, edge_index)
+    def forward(self, x, edge_index, edge_attr=None):
+        hyperedge_attr = self.generate_hyperedge_features(
+            x, edge_index, edge_attr=edge_attr
+        )
         edge_index = edge_index[[1, 0]]
-        return self.conv((hyperedge_attr, x), edge_index)
+        return self.conv((hyperedge_attr, x), edge_index, edge_attr=edge_attr)
