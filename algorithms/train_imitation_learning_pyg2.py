@@ -26,7 +26,7 @@ from generate_hypergraphs import (
     generate_hypergraph_indices,
     get_hypergraph_file_name,
 )
-from generate_pos import get_pos_file_name
+from generate_pos import get_legacy_pos_file_name, get_pos_file_name
 from run_expert import (
     get_expert_dataset_file_name,
     get_expert_algorithm_and_config,
@@ -157,7 +157,6 @@ def add_training_args(parser):
     parser.add_argument("--pre_gnn_embedding_size", type=int, default=None)
     parser.add_argument("--pre_gnn_num_mlp_layers", type=int, default=None)
 
-
     return parser
 
 
@@ -245,10 +244,17 @@ def main():
             dense_dataset = pickle.load(f)
     if args.load_positions_separately:
         print("Loading Agent Positions.....")
-        file_name = get_pos_file_name(args)
-        path = pathlib.Path(args.dataset_dir, "positions", file_name)
-        with open(path, "rb") as f:
-            agent_pos = pickle.load(f)
+        try:
+            file_name = get_pos_file_name(args)
+            path = pathlib.Path(args.dataset_dir, "positions", file_name)
+            with open(path, "rb") as f:
+                agent_pos = pickle.load(f)
+        except:
+            print(f"Could not find file: {path}, trying legacy file name.")
+            file_name = get_legacy_pos_file_name(args)
+            path = pathlib.Path(args.dataset_dir, "positions", file_name)
+            with open(path, "rb") as f:
+                agent_pos = pickle.load(f)
         dense_dataset = (*dense_dataset, agent_pos)
     if hypergraph_model:
         print("Loading Hypergraphs.........")

@@ -6,10 +6,15 @@ import torch
 
 from scipy.spatial.distance import squareform, pdist
 
-from run_expert import DATASET_FILE_NAME_KEYS, add_expert_dataset_args
+from run_expert import (
+    DATASET_FILE_NAME_KEYS,
+    add_expert_dataset_args,
+    get_expert_dataset_file_name,
+    get_legacy_expert_dataset_file_name,
+)
 
 
-def get_pos_file_name(args):
+def get_legacy_pos_file_name(args):
     file_name = ""
     dict_args = vars(args)
     for key in sorted(DATASET_FILE_NAME_KEYS):
@@ -17,6 +22,13 @@ def get_pos_file_name(args):
     if args.use_edge_attr:
         file_name += "_pos"
     file_name = file_name[1:] + ".pkl"
+    return file_name
+
+
+def get_pos_file_name(args):
+    file_name = get_expert_dataset_file_name(args)
+    if args.use_edge_attr:
+        file_name = file_name[:-4] + "_pos" + file_name[-4:]
     return file_name
 
 
@@ -59,17 +71,23 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    file_name = ""
-    dict_args = vars(args)
-    for key in sorted(DATASET_FILE_NAME_KEYS):
-        file_name += f"_{key}_{dict_args[key]}"
-    file_name = file_name[1:] + ".pkl"
+    try:
+        file_name = get_expert_dataset_file_name(args)
+        path = pathlib.Path(
+            f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}"
+        )
 
-    path = pathlib.Path(f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}")
+        with open(path, "rb") as f:
+            dataset = pickle.load(f)
+    except:
+        print(f"Could not find file: {path}, trying legacy file name.")
+        file_name = get_legacy_expert_dataset_file_name(args)
+        path = pathlib.Path(
+            f"{args.dataset_dir}", "raw_expert_predictions", f"{file_name}"
+        )
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "rb") as f:
-        dataset = pickle.load(f)
+        with open(path, "rb") as f:
+            dataset = pickle.load(f)
     if isinstance(dataset, tuple):
         dataset, seed_mask = dataset
 
