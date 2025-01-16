@@ -168,5 +168,6 @@ cython_debug/
 #.idea/
 notebooks
 algorithms/launch_docker.sh
+algorithms/gc.sh
 algorithms/scrimp/model
 algorithms/rhcr_cpp

@@ -318,7 +318,6 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=train_relevances,
-            use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
             **dataset_kwargs,
         )
@@ -329,7 +328,6 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=validation_relevances,
-            use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
             **dataset_kwargs,
         )
@@ -340,7 +338,6 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=train_relevances,
-            use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
             **dataset_kwargs,
         )
@@ -350,7 +347,6 @@ def main():
             use_target_vec=args.use_target_vec,
             return_relevance_as_y=args.train_only_for_relevance,
             relevances=validation_relevances,
-            use_relevances=args.use_relevances,
             edge_attr_opts=args.edge_attr_opts,
             **dataset_kwargs,
         )
@@ -457,7 +453,6 @@ def main():
                         use_target_vec=args.use_target_vec,
                         return_relevance_as_y=args.train_only_for_relevance,
                         relevances=oe_relevances,
-                        use_relevances=args.use_relevances,
                         edge_attr_opts=args.edge_attr_opts,
                         **dataset_kwargs,
                     ),
@@ -471,7 +466,6 @@ def main():
                         use_target_vec=args.use_target_vec,
                         return_relevance_as_y=args.train_only_for_relevance,
                         relevances=oe_relevances,
-                        use_relevances=args.use_relevances,
                         edge_attr_opts=args.edge_attr_opts,
                         **dataset_kwargs,
                     ),

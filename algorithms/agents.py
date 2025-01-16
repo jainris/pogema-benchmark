@@ -1288,13 +1288,15 @@ def decode_intmd_training_args(args):
 def get_intmd_training_vals(args):
     intmd_training, vals = decode_intmd_training_args(args)
     output_sizes = []
+    use_relevances = False
     if intmd_training:
         for v, _ in vals:
             if v == "relevances":
                 output_sizes.append(5)
+                use_relevances = True
             else:
                 raise ValueError(f"Unsupported intmd training: {v}.")
-    return intmd_training, output_sizes
+    return intmd_training, use_relevances, output_sizes
 
 
 def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
@@ -1318,7 +1320,10 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
             args.generate_graph_from_hyperedges and hmodel
         ), "We do not support use of graph inputs with hypergraph models."
         hypergraph_model = hypergraph_model or hmodel
-        dataset_kwargs = {"use_edge_attr": model_kwargs["use_edge_attr"]}
+        dataset_kwargs = {
+            "use_edge_attr": model_kwargs["use_edge_attr"],
+            "use_relevances": args.use_relevances,
+        }
         model = DecentralPlannerGATNet(**common_kwargs, **model_kwargs).to(device)
         model.reset_parameters()
     elif args.agent_network_type == "parallel" or args.agent_network_type == "series":
@@ -1353,7 +1358,13 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
             }
         hypergraph_model = hypergraph_model or hmodel
 
-        intmd_training, intmd_output_sizes = get_intmd_training_vals(args)
+        intmd_training, use_relevances, intmd_output_sizes = get_intmd_training_vals(
+            args
+        )
+        if intmd_training and use_relevances:
+            dataset_kwargs = dataset_kwargs | {"use_relevances": "straight"}
+        else:
+            dataset_kwargs = dataset_kwargs | {"use_relevances": args.use_relevances}
 
         model = AgentWithTwoNetworks(
             **common_kwargs,
