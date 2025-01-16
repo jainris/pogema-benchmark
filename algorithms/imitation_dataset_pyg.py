@@ -216,7 +216,7 @@ class MAPFHypergraphDataset(Dataset):
         if self.return_relevance_as_y:
             extra_kwargs = extra_kwargs | {"original_y": y}
             y = self.relevances[index]
-        if self.use_relevances is not None:
+        if (self.use_relevances is not None) and (self.relevances is not None):
             if self.use_relevances == "straight":
                 relevances = self.relevances[index]
             elif self.use_relevances == "one-hot":
