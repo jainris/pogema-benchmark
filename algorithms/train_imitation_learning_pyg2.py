@@ -524,7 +524,7 @@ def main():
                         for key in val_accuracies:
                             val_accuracies[key] += new_acc[key]
                     val_samples += data.x.shape[0]
-                for key in accuracies:
+                for key in val_accuracies:
                     val_accuracies[key] = val_accuracies[key] / val_samples
 
                 val_accuracy = val_accuracies["validation_accuracy"]
