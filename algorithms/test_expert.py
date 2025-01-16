@@ -111,6 +111,11 @@ def main():
 
     grid_configs = []
 
+    if args.skip_n is not None:
+        seeds = seeds[args.skip_n:]
+    if args.subsample_n is not None:
+        seeds = seeds[:args.subsample_n]
+
     for seed in seeds:
         grid_configs.append(_grid_config_generator(seed))
 
