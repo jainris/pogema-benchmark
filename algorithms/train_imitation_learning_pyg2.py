@@ -440,7 +440,7 @@ def main():
             else:
                 for key in accuracies:
                     accuracies[key] += new_acc[key]
-            num_samples += out.shape[0]
+            num_samples += data.x.shape[0]
             n_batches += 1
 
         if oe_graph_dataset is not None:
@@ -487,7 +487,7 @@ def main():
                 new_acc = loss_function.get_accuracies(out, data)
                 for key in accuracies:
                     accuracies[key] += new_acc[key]
-                num_samples += out.shape[0]
+                num_samples += data.x.shape[0]
                 n_batches += 1
         lr_scheduler.step()
 
@@ -523,7 +523,7 @@ def main():
                     else:
                         for key in val_accuracies:
                             val_accuracies[key] += new_acc[key]
-                    val_samples += out.shape[0]
+                    val_samples += data.x.shape[0]
                 for key in accuracies:
                     val_accuracies[key] = val_accuracies[key] / val_samples
 
