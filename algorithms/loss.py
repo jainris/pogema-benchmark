@@ -91,10 +91,10 @@ def get_loss_function(args) -> torch.nn.Module:
             args.pibt_expert_relevance_training
         ), "Need the relevance data to train for relevance."
         loss_function = PairwiseLogisticLoss()
-        acc_function = default_acc
+        acc_function = ranking_acc
     else:
         loss_function = torch.nn.CrossEntropyLoss()
-        acc_function = ranking_acc
+        acc_function = default_acc
 
     intmd_training, vals = decode_intmd_training_args(args)
     if not intmd_training:
