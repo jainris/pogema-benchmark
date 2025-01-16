@@ -228,8 +228,8 @@ def main():
             nGraphFilterTaps=args.num_gnn_layers,
             nAttentionHeads=args.num_attention_heads,
             use_dropout=True,
-            CNN_mode=None,
-            attentionMode="GAT_modified",
+            CNN_mode=args.cnn_mode,
+            attentionMode=args.attention_mode,
             AttentionConcat=True,
         ).to(device)
     else:

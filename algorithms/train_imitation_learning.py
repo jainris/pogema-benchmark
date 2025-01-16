@@ -472,6 +472,9 @@ class NaiveCollisionShieldingMAGAT(NaiveCollisionShielding):
                 actions[i] = self.rng.choice(
                     ids, size=1, replace=False, p=probs[i], shuffle=False
                 )
+        elif self.sampling_method == "exp-multinomial":
+            probs = torch.exp(actions)
+            actions = torch.multinomial(probs, num_samples=1)
         else:
             raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
         return actions
