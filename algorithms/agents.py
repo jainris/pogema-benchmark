@@ -853,7 +853,9 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 embedding_sizes=[cnn_output_size],
             )
         elif cnn_mode == "ResNetLarge_withMLP":
-            self.cnn = ResNetLarge_withMLP(cnn_output_size)
+            self.cnn = ResNetLarge_withMLP(
+                output_size=cnn_output_size, embedding_sizes=[cnn_output_size]
+            )
 
         self.gnn_pre_processor, self.numFeatures2Share = get_gnn_input_processor(
             use_target_vec=use_target_vec,
