@@ -45,6 +45,7 @@ from generate_target_vec import get_target_vec_file_name, generate_target_vec
 from ranking_losses import PairwiseLogisticLoss, calculate_accuracy_for_ranking
 from pibt_training import get_expert_algorithm_and_config as get_pibt_alg
 from pibt_training import run_expert_algorithm as run_pibt
+from loss import get_loss_function
 
 
 def add_training_args(parser):
@@ -134,7 +135,7 @@ def add_training_args(parser):
     parser.add_argument(
         "--train_on_terminated_agents",
         action=argparse.BooleanOptionalAction,
-        default=False,
+        default=True,
     )
     parser.add_argument(
         "--run_expert_in_separate_fork",
@@ -157,6 +158,8 @@ def add_training_args(parser):
     parser.add_argument("--pre_gnn_embedding_size", type=int, default=None)
     parser.add_argument("--pre_gnn_num_mlp_layers", type=int, default=None)
 
+    parser.add_argument("--intmd_training", type=str, default=None)
+
     return parser
 
 
@@ -171,6 +174,7 @@ def main():
     print(args)
 
     assert args.save_termination_state
+    assert args.train_on_terminated_agents
     assert (args.use_relevances is None) or (
         not args.train_only_for_relevance
     ), "Can't train for relevance and also use in model."
@@ -276,13 +280,7 @@ def main():
             relevances = pickle.load(f)
         relevances = torch.from_numpy(relevances)
 
-    if args.train_only_for_relevance:
-        assert (
-            args.pibt_expert_relevance_training
-        ), "Need the relevance data to train for relevance."
-        loss_function = PairwiseLogisticLoss()
-    else:
-        loss_function = torch.nn.CrossEntropyLoss()
+    loss_function = get_loss_function(args)
 
     wandb.init(
         project="hyper-mapf-pogema",
@@ -424,7 +422,7 @@ def main():
     print("Starting Training....")
     for epoch in range(args.num_epochs):
         total_loss = 0.0
-        tot_correct = 0
+        accuracies = None
         num_samples = 0
         n_batches = 0
 
@@ -434,30 +432,18 @@ def main():
             optimizer.zero_grad()
 
             out = model(data.x, data)
-            target_actions = data.y
-
-            if not args.train_on_terminated_agents:
-                out = out[~data.terminated]
-                target_actions = target_actions[~data.terminated]
-            loss = loss_function(out, target_actions)
-
+            loss = loss_function(out, data)
             total_loss += loss.item()
 
             loss.backward()
             optimizer.step()
 
-            if args.train_only_for_relevance:
-                tot_correct += (
-                    torch.sum(calculate_accuracy_for_ranking(out, target_actions))
-                    .detach()
-                    .cpu()
-                )
+            new_acc = loss_function.get_accuracies(out, data)
+            if accuracies is None:
+                accuracies = new_acc
             else:
-                tot_correct += (
-                    torch.sum(torch.argmax(out, dim=-1) == target_actions)
-                    .detach()
-                    .cpu()
-                )
+                for key in accuracies:
+                    accuracies[key] += new_acc[key]
             num_samples += out.shape[0]
             n_batches += 1
 
@@ -497,42 +483,28 @@ def main():
                 optimizer.zero_grad()
 
                 out = model(data.x, data)
-                target_actions = data.y
-
-                if not args.train_on_terminated_agents:
-                    out = out[~data.terminated]
-                    target_actions = target_actions[~data.terminated]
-                loss = loss_function(out, target_actions)
+                loss = loss_function(out, data)
 
                 total_loss += loss.item()
 
                 loss.backward()
                 optimizer.step()
 
-                if args.train_only_for_relevance:
-                    tot_correct += (
-                        torch.sum(calculate_accuracy_for_ranking(out, target_actions))
-                        .detach()
-                        .cpu()
-                    )
-                else:
-                    tot_correct += (
-                        torch.sum(torch.argmax(out, dim=-1) == target_actions)
-                        .detach()
-                        .cpu()
-                    )
+                new_acc = loss_function.get_accuracies(out, data)
+                for key in accuracies:
+                    accuracies[key] += new_acc[key]
                 num_samples += out.shape[0]
                 n_batches += 1
         lr_scheduler.step()
 
+        for key in accuracies:
+            accuracies[key] = accuracies[key] / num_samples
+
         print(
-            f"Epoch {epoch}, Mean Loss: {total_loss / n_batches}, Mean Accuracy: {tot_correct / num_samples}"
+            f"Epoch {epoch}, Mean Loss: {total_loss / n_batches}, Mean Accuracy: {accuracies['train_accuracy']}"
         )
 
-        results = {
-            "train_loss": total_loss / n_batches,
-            "train_accuracy": tot_correct / num_samples,
-        }
+        results = {"train_loss": total_loss / n_batches} | accuracies
         if (not args.skip_validation) and (
             (epoch + 1) % args.validation_every_epochs == 0
         ):
@@ -544,34 +516,25 @@ def main():
             print("Starting Validation")
 
             if not args.skip_validation_accuracy:
-                val_correct = 0
+                val_accuracies = None
                 val_samples = 0
 
                 for data in validation_dl:
                     data = data.to(device)
                     out = model(data.x, data)
-                    target_actions = data.y
+                    new_acc = loss_function.get_accuracies(out, data, "validation")
 
-                    if not args.train_on_terminated_agents:
-                        out = out[~data.terminated]
-                        target_actions = target_actions[~data.terminated]
-                    if args.train_only_for_relevance:
-                        val_correct += (
-                            torch.sum(
-                                calculate_accuracy_for_ranking(out, target_actions)
-                            )
-                            .detach()
-                            .cpu()
-                        )
+                    if val_accuracies is None:
+                        val_accuracies = new_acc
                     else:
-                        val_correct += (
-                            torch.sum(torch.argmax(out, dim=-1) == target_actions)
-                            .detach()
-                            .cpu()
-                        )
+                        for key in val_accuracies:
+                            val_accuracies[key] += new_acc[key]
                     val_samples += out.shape[0]
-                val_accuracy = val_correct / val_samples
-                results = results | {"validation_accuracy": val_accuracy}
+                for key in accuracies:
+                    val_accuracies[key] = val_accuracies[key] / val_samples
+
+                val_accuracy = val_accuracies["validation_accuracy"]
+                results = results | val_accuracies
                 if val_accuracy > best_validation_accuracy:
                     best_validation_accuracy = val_accuracy
                     checkpoint_path = pathlib.Path(

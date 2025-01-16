@@ -824,6 +824,8 @@ class AgentWithTwoNetworks(torch.nn.Module):
         use_relevances=None,
         pre_gnn_embedding_size=None,
         pre_gnn_num_mlp_layers=None,
+        intmd_training=False,
+        intmd_training_output_sizes=None,
     ):
         super().__init__()
 
@@ -960,6 +962,26 @@ class AgentWithTwoNetworks(torch.nn.Module):
         self.gnns1 = torch.nn.ModuleList(graph1_convs)
         self.gnns2 = torch.nn.ModuleList(graph2_convs)
 
+        self.intmd_output_generators = None
+        if intmd_training:
+            assert parallel_or_series == "series"
+            assert intmd_training_output_sizes is not None
+
+            intmd_output_generators = []
+
+            for output_size in intmd_training_output_sizes:
+                mlp_sizes = [
+                    num_attention_heads * gnn1_last_embd_sz,
+                    gnn1_last_embd_sz,
+                    output_size,
+                ]
+                mlp = []
+                for i in range(len(mlp_sizes) - 1):
+                    mlp.append(torch.nn.Linear(mlp_sizes[i], mlp_sizes[i + 1]))
+                mlp = torch.nn.ModuleList(mlp)
+                intmd_output_generators.append(mlp)
+            self.intmd_output_generators = torch.nn.ModuleList(intmd_output_generators)
+
         #####################################################################
         #                                                                   #
         #                    MLP --- map to actions                         #
@@ -992,6 +1014,11 @@ class AgentWithTwoNetworks(torch.nn.Module):
         for lin in self.actionsMLP:
             lin.reset_parameters()
 
+        if self.intmd_output_generators is not None:
+            for mlp in self.intmd_output_generators:
+                for lin in mlp:
+                    lin.reset_parameters()
+
     def forward(self, x, data):
         x = self.cnn(x)
         x = self.gnn_pre_processor(x, data)
@@ -1021,6 +1048,19 @@ class AgentWithTwoNetworks(torch.nn.Module):
             if self.use_dropout:
                 x = F.dropout(x, p=0.2, training=self.training)
             x = lin(x)
+
+        if self.intmd_output_generators is not None:
+            outputs = [x]
+            for mlp in self.intmd_output_generators:
+                x = mlp[0](gnn1_out)
+                for lin in mlp[1:]:
+                    x = F.relu(x)
+                    if self.use_dropout:
+                        x = F.dropout(x, p=0.2, training=self.training)
+                    x = lin(x)
+                outputs += [x]
+            return tuple(*outputs)
+
         return x
 
 
@@ -1228,6 +1268,33 @@ def load_and_freeze_parameters(model, args, device):
     return model
 
 
+def decode_intmd_training_args(args):
+    if args.intmd_training is None:
+        return False, []
+    intmd_trainings = args.intmd_training.split("+")
+    vals = []
+    for intmd_training in intmd_trainings:
+        intmd_training = intmd_training.split("=")
+        if len(intmd_training) == 1:
+            vals.append((intmd_training[0], 1.0))
+        else:
+            assert len(intmd_training) == 2
+            vals.append((intmd_training[0], intmd_training[1]))
+    return True, vals
+
+
+def get_intmd_training_vals(args):
+    intmd_training, vals = decode_intmd_training_args(args)
+    output_sizes = []
+    if intmd_training:
+        for v, _ in vals:
+            if v == "relevances":
+                output_sizes.append(5)
+            else:
+                raise ValueError(f"Unsupported intmd training: {v}.")
+    return intmd_training, output_sizes
+
+
 def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
     hypergraph_model = args.generate_graph_from_hyperedges
     common_kwargs = dict(
@@ -1283,11 +1350,16 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
                 )
             }
         hypergraph_model = hypergraph_model or hmodel
+
+        intmd_training, intmd_output_sizes = get_intmd_training_vals(args)
+
         model = AgentWithTwoNetworks(
             **common_kwargs,
             gnn1_kwargs=model1_kwargs,
             gnn2_kwargs=model2_kwargs,
             parallel_or_series=args.agent_network_type,
+            intmd_training=intmd_training,
+            intmd_training_output_sizes=intmd_output_sizes,
         ).to(device)
         model.reset_parameters()
     else:
