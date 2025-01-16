@@ -790,6 +790,9 @@ class DecentralPlannerGATNet(torch.nn.Module):
         for lin in self.actionsMLP:
             lin.reset_parameters()
 
+    def in_simulation(self, value):
+        pass
+
     def forward(self, x, data):
         x = self.cnn(x)
         x = self.gnn_pre_processor(x, data)
@@ -1006,6 +1009,8 @@ class AgentWithTwoNetworks(torch.nn.Module):
         self.use_dropout = use_dropout
         self.actionsMLP = torch.nn.ModuleList(actionsfc)
 
+        self.generate_intmd_outputs = True
+
     def reset_parameters(self):
         self.cnn.reset_parameters()
         self.gnn_pre_processor.reset_parameters()
@@ -1020,6 +1025,9 @@ class AgentWithTwoNetworks(torch.nn.Module):
             for mlp in self.intmd_output_generators:
                 for lin in mlp:
                     lin.reset_parameters()
+
+    def in_simulation(self, value):
+        self.generate_intmd_outputs = value
 
     def forward(self, x, data):
         x = self.cnn(x)
@@ -1051,7 +1059,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 x = F.dropout(x, p=0.2, training=self.training)
             x = lin(x)
 
-        if self.intmd_output_generators is not None:
+        if (self.generate_intmd_outputs) and (self.intmd_output_generators is not None):
             outputs = [x]
             for mlp in self.intmd_output_generators:
                 x = mlp[0](gnn1_out)
@@ -1079,6 +1087,8 @@ def run_model_on_grid(
 ):
     env = pogema_v0(grid_config=grid_config)
     observations, infos = env.reset()
+
+    model.in_simulation(True)
 
     if aux_func is not None:
         aux_func(env=env, observations=observations, actions=None)
@@ -1109,6 +1119,7 @@ def run_model_on_grid(
             max_episodes -= 1
             if max_episodes <= 0:
                 break
+    model.model.in_simulation(False)
     return all(terminated), env, observations
 
 
