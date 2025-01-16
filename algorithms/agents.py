@@ -1061,7 +1061,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
                         x = F.dropout(x, p=0.2, training=self.training)
                     x = lin(x)
                 outputs += [x]
-            return tuple(*outputs)
+            return tuple(outputs)
 
         return x
 
