@@ -1279,7 +1279,7 @@ def decode_intmd_training_args(args):
             vals.append((intmd_training[0], 1.0))
         else:
             assert len(intmd_training) == 2
-            vals.append((intmd_training[0], intmd_training[1]))
+            vals.append((intmd_training[0], float(intmd_training[1])))
     return True, vals
 
 
