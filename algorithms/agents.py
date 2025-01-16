@@ -1027,7 +1027,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
                     lin.reset_parameters()
 
     def in_simulation(self, value):
-        self.generate_intmd_outputs = value
+        self.generate_intmd_outputs = not value
 
     def forward(self, x, data):
         x = self.cnn(x)
