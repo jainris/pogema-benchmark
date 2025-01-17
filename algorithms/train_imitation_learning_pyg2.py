@@ -7,10 +7,7 @@ import wandb
 import multiprocessing as mp
 from itertools import compress
 
-from pogema import GridConfig
-
 import torch
-import torch.nn.functional as F
 import torch.optim as optim
 
 from torch_geometric.loader import DataLoader
@@ -42,7 +39,6 @@ from grid_config_generator import (
 )
 from generate_target_vec import get_target_vec_file_name, generate_target_vec
 
-from ranking_losses import PairwiseLogisticLoss, calculate_accuracy_for_ranking
 from pibt_training import get_expert_algorithm_and_config as get_pibt_alg
 from pibt_training import run_expert_algorithm as run_pibt
 from loss import get_loss_function
@@ -159,6 +155,11 @@ def add_training_args(parser):
     parser.add_argument("--pre_gnn_num_mlp_layers", type=int, default=None)
 
     parser.add_argument("--intmd_training", type=str, default=None)
+    parser.add_argument(
+        "--softmax_scores_for_pairwise_loss",
+        type=argparse.BooleanOptionalAction,
+        default=False,
+    )
 
     return parser
 

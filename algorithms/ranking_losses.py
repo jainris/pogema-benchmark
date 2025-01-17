@@ -1,13 +1,28 @@
+from typing import Optional
+
 import torch
 from torch import Tensor
 
 
 class PairwiseLogisticLoss(torch.nn.Module):
-    def __init__(self, temperature: float = 1.0):
+    def __init__(
+        self,
+        temperature: float = 1.0,
+        margin: Optional[float] = None,
+        softmax_outputs: bool = False,
+    ):
         super().__init__()
         self.temperature = temperature
+        self.margin = margin
+        self.softmax_outputs = softmax_outputs
+        if margin is not None:
+            raise NotImplementedError(
+                "Yet to implement margins for pairwise logistic loss."
+            )
 
     def forward(self, scores: Tensor, relevance: Tensor):
+        if self.softmax_outputs:
+            scores = torch.nn.functional.softmax(scores, dim=-1)
         scores_i = torch.unsqueeze(scores, dim=-1)
         scores_j = torch.unsqueeze(scores, dim=-2)
         score_diff = scores_i - scores_j

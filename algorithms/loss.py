@@ -90,7 +90,9 @@ def get_loss_function(args) -> torch.nn.Module:
         assert (
             args.pibt_expert_relevance_training
         ), "Need the relevance data to train for relevance."
-        loss_function = PairwiseLogisticLoss()
+        loss_function = PairwiseLogisticLoss(
+            softmax_outputs=args.softmax_scores_for_pairwise_loss
+        )
         acc_function = ranking_acc
     else:
         loss_function = torch.nn.CrossEntropyLoss()
@@ -115,7 +117,9 @@ def get_loss_function(args) -> torch.nn.Module:
 
         for i, (v, weight) in enumerate(vals):
             if v == "relevances":
-                loss_function = PairwiseLogisticLoss()
+                loss_function = PairwiseLogisticLoss(
+                    softmax_outputs=args.softmax_scores_for_pairwise_loss
+                )
                 acc_function = ranking_acc
                 loss_function = LossWrapper(
                     loss_function,

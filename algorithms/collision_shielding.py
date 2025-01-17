@@ -10,6 +10,9 @@ class BaseCollisionShielding:
         self.env = env
         self.sampling_method = sampling_method
 
+    def in_simulation(self, value):
+        self.model.in_simulation(value)
+
     def get_actions(self, gdata):
         raise NotImplementedError
 

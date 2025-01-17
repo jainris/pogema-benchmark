@@ -829,6 +829,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         pre_gnn_num_mlp_layers=None,
         intmd_training=False,
         intmd_training_output_sizes=None,
+        pass_cnn_output_to_gnn2=False,
     ):
         super().__init__()
 
@@ -860,7 +861,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 output_size=cnn_output_size, embedding_sizes=[cnn_output_size]
             )
 
-        self.gnn_pre_processor, self.numFeatures2Share = get_gnn_input_processor(
+        self.gnn_pre_processor, gnn_input_size = get_gnn_input_processor(
             use_target_vec=use_target_vec,
             use_relevances=use_relevances,
             input_size=cnn_output_size,
@@ -874,7 +875,9 @@ class AgentWithTwoNetworks(torch.nn.Module):
         #                                                                   #
         #####################################################################
 
-        def _define_gnn_convs(kwargs: dict) -> tuple[Sequence[torch.nn.Module], int]:
+        def _define_gnn_convs(
+            kwargs: dict, input_size: int
+        ) -> tuple[Sequence[torch.nn.Module], int]:
             gnn_type = kwargs.get("gnn_type", None)
             assert gnn_type is not None, "Missing gnn_type."
             gnn_kwargs = kwargs.get("gnn_kwargs", None)
@@ -917,7 +920,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
             graph_convs = []
             graph_convs.append(
                 GNNFactory(
-                    in_channels=self.numFeatures2Share,
+                    in_channels=input_size,
                     out_channels=embedding_sizes_gnn[0],
                     model_type=gnn_type,
                     num_attention_heads=num_attention_heads,
@@ -946,20 +949,30 @@ class AgentWithTwoNetworks(torch.nn.Module):
 
             return graph_convs, embedding_sizes_gnn[-1]
 
-        graph1_convs, gnn1_last_embd_sz = _define_gnn_convs(gnn1_kwargs)
-        graph2_convs, gnn2_last_embd_sz = _define_gnn_convs(gnn2_kwargs)
+        graph1_convs, gnn1_last_embd_sz = _define_gnn_convs(gnn1_kwargs, gnn_input_size)
+
+        gnn2_input_size = (
+            gnn_input_size
+            if parallel_or_series == "parallel"
+            else num_attention_heads * gnn1_last_embd_sz
+        )
+        self.pass_cnn_output_to_gnn2 = pass_cnn_output_to_gnn2
+        if pass_cnn_output_to_gnn2:
+            assert (
+                parallel_or_series == "series"
+            ), f"Only series model can also get CNN output. Got {parallel_or_series}."
+            gnn2_input_size = gnn_input_size + num_attention_heads * gnn1_last_embd_sz
+
+        graph2_convs, gnn2_last_embd_sz = _define_gnn_convs(
+            gnn2_kwargs, gnn2_input_size
+        )
 
         self.parallel_or_series = parallel_or_series
         if parallel_or_series == "parallel":
             assert (
                 gnn1_last_embd_sz == gnn2_last_embd_sz
             ), "Expecting both output sizes to be the same."
-        elif self.parallel_or_series == "series":
-            starting_sz = self.numFeatures2Share
-            assert (
-                num_attention_heads * gnn1_last_embd_sz == starting_sz
-            ), "Expecting the output size of gnn1 to match the input size of gnn2."
-        else:
+        elif self.parallel_or_series != "series":
             raise ValueError(
                 f"Got Invalid value for parallel_or_series {parallel_or_series}"
             )
@@ -1042,6 +1055,9 @@ class AgentWithTwoNetworks(torch.nn.Module):
             gnn2_out = x
         else:
             gnn2_out = gnn1_out
+        if self.pass_cnn_output_to_gnn2:
+            gnn2_out = torch.concatenate([gnn2_out, x], dim=-1)
+
         for conv in self.gnns2:
             gnn2_out = conv(gnn2_out, data)
             gnn2_out = F.relu(gnn2_out)
@@ -1119,7 +1135,7 @@ def run_model_on_grid(
             max_episodes -= 1
             if max_episodes <= 0:
                 break
-    model.model.in_simulation(False)
+    model.in_simulation(False)
     return all(terminated), env, observations
 
 
