@@ -20,10 +20,7 @@ class NaiveCollisionShielding(BaseCollisionShielding):
         if self.sampling_method == "probabilistic":
             self.rng = np.random.default_rng(seed=env.grid_config.seed)
 
-    def get_actions(self, gdata):
-        # Naive collision shielding leaves the shielding to the env
-        # So just returning the actions given by the model
-        actions = self.model(gdata.x, gdata)
+    def shield(self, actions):
         if self.sampling_method == "deterministic":
             actions = torch.argmax(actions, dim=-1).detach().cpu()
         elif self.sampling_method == "probabilistic":
@@ -42,6 +39,12 @@ class NaiveCollisionShielding(BaseCollisionShielding):
         else:
             raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
         return actions
+
+    def get_actions(self, gdata):
+        # Naive collision shielding leaves the shielding to the env
+        # So just returning the actions given by the model
+        actions = self.model(gdata.x, gdata)
+        return self.shield(actions)
 
 
 def get_neighbors(grid, coord, moves):
@@ -196,8 +199,23 @@ class PIBTInstance(PIBT):
         raise AssertionError("This method should not be run.")
 
 
+class PIBTInstanceDist(PIBTInstance):
+    def __init__(self, grid, starts, goals, moves, sampling_method, seed=0):
+        super().__init__(grid, starts, goals, moves, sampling_method, seed)
+        self._update_priorities()
+
+    def _update_priorities(self):
+        # Setting priorities based on distance to goal
+        for i in range(self.N):
+            sx, sy = self.state[i]
+            gx, gy = self.goals[i]
+            self.priorities[i] = abs(gx - sx) + abs(gy - sy)
+
+
 class PIBTCollisionShielding(BaseCollisionShielding):
-    def __init__(self, model, env, sampling_method="deterministic"):
+    def __init__(
+        self, model, env, sampling_method="deterministic", dist_priorities=False
+    ):
         super().__init__(model, env, sampling_method)
 
         obstacles = env.grid.get_obstacles(ignore_borders=True)
@@ -207,14 +225,24 @@ class PIBTCollisionShielding(BaseCollisionShielding):
         starts = [tuple(s) for s in starts]
         goals = [tuple(g) for g in goals]
 
-        self.pibt_instance = PIBTInstance(
-            grid=obstacles == 0,
-            starts=starts,
-            goals=goals,
-            moves=env.grid_config.MOVES,
-            seed=env.grid_config.seed,
-            sampling_method=sampling_method,
-        )
+        if dist_priorities:
+            self.pibt_instance = PIBTInstanceDist(
+                grid=obstacles == 0,
+                starts=starts,
+                goals=goals,
+                moves=env.grid_config.MOVES,
+                seed=env.grid_config.seed,
+                sampling_method=sampling_method,
+            )
+        else:
+            self.pibt_instance = PIBTInstance(
+                grid=obstacles == 0,
+                starts=starts,
+                goals=goals,
+                moves=env.grid_config.MOVES,
+                seed=env.grid_config.seed,
+                sampling_method=sampling_method,
+            )
 
     def get_actions(self, gdata):
         actions = self.model(gdata.x, gdata)
@@ -235,7 +263,17 @@ def get_collision_shielded_model(model, env, args):
         )
     elif collision_shielding == "pibt":
         return PIBTCollisionShielding(
-            model=model, env=env, sampling_method=args.action_sampling
+            model=model,
+            env=env,
+            sampling_method=args.action_sampling,
+            dist_priorities=False,
+        )
+    elif collision_shielding == "pibt-dist":
+        return PIBTCollisionShielding(
+            model=model,
+            env=env,
+            sampling_method=args.action_sampling,
+            dist_priorities=True,
         )
     else:
         raise ValueError(

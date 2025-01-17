@@ -499,7 +499,14 @@ def get_collision_shielded_model(model, env, collision_shielding, action_samplin
         )
     elif collision_shielding == "pibt":
         return PIBTCollisionShieldingMAGAT(
-            model=model, env=env, sampling_method=action_sampling
+            model=model, env=env, sampling_method=action_sampling, dist_priorities=False
+        )
+    elif collision_shielding == "pibt-dist":
+        return PIBTCollisionShieldingMAGAT(
+            model=model,
+            env=env,
+            sampling_method=action_sampling,
+            dist_priorities=True,
         )
     else:
         raise ValueError(
