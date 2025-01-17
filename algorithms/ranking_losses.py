@@ -87,7 +87,7 @@ def get_ranking_from_relevance(relevance):
     )
     ranks_flipped = torch.empty_like(relevance)
     ranks_flipped[batch_indices, sorted_indices] = torch.arange(
-        relevance.shape[-1], dtype=ranks.dtype
+        relevance.shape[-1], dtype=ranks.dtype, device=ranks.device
     )
 
     ranks = (ranks + torch.flip(ranks_flipped, dims=[-1])) / 2
