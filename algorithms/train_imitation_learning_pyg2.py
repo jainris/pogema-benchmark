@@ -156,11 +156,11 @@ def add_training_args(parser):
 
     parser.add_argument("--intmd_training", type=str, default=None)
     parser.add_argument(
-        "--pass_cnn_output_to_gnn2", type=argparse.BooleanOptionalAction, default=False
+        "--pass_cnn_output_to_gnn2", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
         "--softmax_scores_for_pairwise_loss",
-        type=argparse.BooleanOptionalAction,
+        action=argparse.BooleanOptionalAction,
         default=False,
     )
 
