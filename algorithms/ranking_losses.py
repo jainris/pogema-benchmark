@@ -75,11 +75,11 @@ def get_ranking_from_relevance(relevance):
     sorted_indices = torch.argsort(relevance, descending=True, stable=True)
     ranks = torch.empty_like(relevance)
 
-    batch_indices = torch.arange(relevance.shape[0], device=relevance.device)
+    batch_indices = torch.arange(relevance.shape[0], device=sorted_indices.device)
     batch_indices = torch.unsqueeze(batch_indices, dim=-1)
 
     ranks[batch_indices, sorted_indices] = torch.arange(
-        relevance.shape[-1], dtype=ranks.dtype
+        relevance.shape[-1], dtype=ranks.dtype, device=ranks.device
     )
 
     sorted_indices = torch.argsort(
