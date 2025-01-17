@@ -2,7 +2,7 @@ from typing import Sequence, Optional
 
 import torch
 
-from ranking_losses import PairwiseLogisticLoss, calculate_accuracy_for_ranking
+from ranking_losses import get_ranking_loss, calculate_accuracy_for_ranking
 from agents import decode_intmd_training_args
 
 
@@ -90,9 +90,7 @@ def get_loss_function(args) -> torch.nn.Module:
         assert (
             args.pibt_expert_relevance_training
         ), "Need the relevance data to train for relevance."
-        loss_function = PairwiseLogisticLoss(
-            softmax_outputs=args.softmax_scores_for_pairwise_loss
-        )
+        loss_function = get_ranking_loss(args.pairwise_loss)
         acc_function = ranking_acc
     else:
         loss_function = torch.nn.CrossEntropyLoss()
@@ -117,9 +115,7 @@ def get_loss_function(args) -> torch.nn.Module:
 
         for i, (v, weight) in enumerate(vals):
             if v == "relevances":
-                loss_function = PairwiseLogisticLoss(
-                    softmax_outputs=args.softmax_scores_for_pairwise_loss
-                )
+                loss_function = get_ranking_loss(args.pairwise_loss)
                 acc_function = ranking_acc
                 loss_function = LossWrapper(
                     loss_function,

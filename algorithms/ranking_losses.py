@@ -38,6 +38,47 @@ class PairwiseLogisticLoss(torch.nn.Module):
         return loss
 
 
+class PairwiseDiffLoss(torch.nn.Module):
+    def __init__(
+        self,
+        temperature: float = 1.0,
+        margin: Optional[float] = None,
+    ):
+        super().__init__()
+        self.temperature = temperature
+        self.margin = margin
+        if margin is not None:
+            raise NotImplementedError(
+                "Yet to implement margins for pairwise logistic loss."
+            )
+
+    def forward(self, scores: Tensor, relevance: Tensor):
+        scores = torch.nn.functional.softmax(scores, dim=-1)
+        scores_i = torch.unsqueeze(scores, dim=-1)
+        scores_j = torch.unsqueeze(scores, dim=-2)
+        score_diff = scores_i - scores_j
+
+        relevance_i = torch.unsqueeze(relevance, dim=-1)
+        relevance_j = torch.unsqueeze(relevance, dim=-2)
+        relevance_diff = relevance_i - relevance_j
+
+        loss = -self.temperature * score_diff
+        loss = torch.mean(loss[relevance_diff > 0])
+
+        return loss
+
+
+def get_ranking_loss(pairwise_loss="logistic"):
+    if pairwise_loss == "logistic":
+        return PairwiseLogisticLoss()
+    elif pairwise_loss == "logistic-softmax":
+        return PairwiseLogisticLoss(softmax_outputs=True)
+    elif pairwise_loss == "diff":
+        return PairwiseDiffLoss()
+    else:
+        raise ValueError(f"Unsupported ranking loss type: {pairwise_loss}.")
+
+
 def calculate_accuracy_for_ranking(y_pred, y_target):
     # y_pred, y_target: [N, C]
     # Getting the predicted ranking
