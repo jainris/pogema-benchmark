@@ -1400,6 +1400,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
             parallel_or_series=args.agent_network_type,
             intmd_training=intmd_training,
             intmd_training_output_sizes=intmd_output_sizes,
+            pass_cnn_output_to_gnn2=args.pass_cnn_output_to_gnn2,
         ).to(device)
         model.reset_parameters()
     else:
