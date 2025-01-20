@@ -426,7 +426,7 @@ def get_collision_shielded_model(model, env, args, rt_data_generator=None):
         return ModelBasedCollisionShielding(
             model=model,
             env=env,
-            sampling_method=args.sampling_method,
+            sampling_method=args.action_sampling,
             rt_data_generator=rt_data_generator,
             shielding_model_args=args.collision_shielding_args,
             model_epoch_num=args.collision_shielding_model_epoch_num,

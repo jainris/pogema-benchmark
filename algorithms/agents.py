@@ -1117,8 +1117,6 @@ def run_model_on_grid(
     if aux_func is not None:
         aux_func(env=env, observations=observations, actions=None)
 
-    model = get_collision_shielded_model(model, env, args)
-
     rt_data_generator = get_runtime_data_generator(
         grid_config=grid_config,
         args=args,
@@ -1126,11 +1124,12 @@ def run_model_on_grid(
         dataset_kwargs=dataset_kwargs,
         use_target_vec=use_target_vec,
     )
+    model = get_collision_shielded_model(
+        model, env, args, rt_data_generator=rt_data_generator
+    )
 
     while True:
-        gdata = rt_data_generator(observations, env).to(device)
-
-        actions = model.get_actions(gdata)
+        actions = model.get_actions(observations)
         observations, rewards, terminated, truncated, infos = env.step(actions)
 
         if aux_func is not None:
