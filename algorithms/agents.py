@@ -793,6 +793,10 @@ class DecentralPlannerGATNet(torch.nn.Module):
     def in_simulation(self, value):
         pass
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def forward(self, x, data):
         x = self.cnn(x)
         x = self.gnn_pre_processor(x, data)
@@ -1041,6 +1045,10 @@ class AgentWithTwoNetworks(torch.nn.Module):
 
     def in_simulation(self, value):
         self.generate_intmd_outputs = not value
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
     def forward(self, x, data):
         x = self.cnn(x)
