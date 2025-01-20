@@ -135,17 +135,19 @@ class PIBTInstance(PIBT):
                 reverse=True,
             )
         elif self.sampling_method == "probabilistic":
-            cur_trans_probs = transition_probabilities[i][mask]
-            cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
-
             try:
+                cur_trans_probs = transition_probabilities[i][mask]
+                cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
+
                 ids = np.arange(len(C))
                 ids = self.rng.choice(
                     ids, size=len(C), replace=False, p=cur_trans_probs, shuffle=False
                 )
             except:
                 # Potential error due to zeroing of some probs
+                cur_trans_probs = transition_probabilities[i][mask]
                 EPSILON = 1e-6
+
                 cur_trans_probs = cur_trans_probs + EPSILON
                 cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
 
