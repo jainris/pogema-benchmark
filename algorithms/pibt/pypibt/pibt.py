@@ -108,3 +108,49 @@ class PIBT:
                 break  # goal
 
         return configs
+
+
+class PIBTDistanceBased(PIBT):
+    def get_manhattan_distance(self, i: int, u: Coord) -> int:
+        gx, gy = self.goals[i]
+        ux, uy = u
+        return abs(gx - ux) + abs(gy - uy)
+
+    def funcPIBT(self, Q_from: Config, Q_to: Config, i: int) -> bool:
+        # true -> valid, false -> invalid
+
+        # get candidate next vertices
+        C = [Q_from[i]] + get_neighbors(self.grid, Q_from[i])
+        self.rng.shuffle(C)  # tie-breaking, randomize
+        C = sorted(C, key=lambda u: self.get_manhattan_distance(i, u))
+
+        # vertex assignment
+        for v in C:
+            # avoid vertex collision
+            if self.occupied_nxt[v] != self.NIL:
+                continue
+
+            j = self.occupied_now[v]
+
+            # avoid edge collision
+            if j != self.NIL and Q_to[j] == Q_from[i]:
+                continue
+
+            # reserve next location
+            Q_to[i] = v
+            self.occupied_nxt[v] = i
+
+            # priority inheritance (j != i due to the second condition)
+            if (
+                j != self.NIL
+                and (Q_to[j] == self.NIL_COORD)
+                and (not self.funcPIBT(Q_from, Q_to, j))
+            ):
+                continue
+
+            return True
+
+        # failed to secure node
+        Q_to[i] = Q_from[i]
+        self.occupied_nxt[Q_from[i]] = i
+        return False

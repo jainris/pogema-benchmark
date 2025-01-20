@@ -1,7 +1,7 @@
 import numpy as np
 from pogema import pogema_v0, GridConfig
 
-from pibt.pypibt.pibt import PIBT
+from pibt.pypibt.pibt import PIBT, PIBTDistanceBased
 from pogema_toolbox.algorithm_config import AlgoBase
 
 
@@ -36,7 +36,9 @@ class PIBTInference:
         starts = [tuple(s) for s in starts]
         goals = [tuple(g) for g in goals]
 
-        self.pibt_expert = PIBT(obstacles == 0, starts, goals, self.env.grid_config.seed)
+        self.pibt_expert = PIBT(
+            obstacles == 0, starts, goals, self.env.grid_config.seed
+        )
         return self.pibt_expert.run(self.env.grid.config.max_episode_steps + 1)
 
     def _get_next_move(self, step):
@@ -57,3 +59,18 @@ class PIBTInference:
         actions = self._get_next_move(self.step)
         self.step += 1
         return actions
+
+
+class PIBTDistanceBasedInference(PIBTInference):
+    def run_pibt(self):
+        obstacles = self.env.grid.get_obstacles(ignore_borders=True)
+        starts = self.env.grid.get_agents_xy(ignore_borders=True)
+        goals = self.env.grid.get_targets_xy(ignore_borders=True)
+
+        starts = [tuple(s) for s in starts]
+        goals = [tuple(g) for g in goals]
+
+        self.pibt_expert = PIBTDistanceBased(
+            obstacles == 0, starts, goals, self.env.grid_config.seed
+        )
+        return self.pibt_expert.run(self.env.grid.config.max_episode_steps + 1)

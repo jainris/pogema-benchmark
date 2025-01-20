@@ -6,8 +6,7 @@ import wandb
 
 from pogema import pogema_v0, GridConfig
 
-from lacam.inference import LacamInference, LacamInferenceConfig
-
+from run_expert import get_expert_algorithm_and_config
 from grid_config_generator import add_grid_config_args, grid_config_generator_factory
 
 EXPERT_FILE_NAME_KEYS = [
@@ -61,6 +60,8 @@ def run_expert_algorithm(expert, env=None, observations=None, grid_config=None):
 
     makespan = 0
     flowtime = np.zeros(env.get_num_agents())
+
+    expert.reset_states(env)
 
     while True:
         actions = expert.act(observations)
@@ -119,11 +120,7 @@ def main():
     for seed in seeds:
         grid_configs.append(_grid_config_generator(seed))
 
-    if args.expert_algorithm == "LaCAM":
-        inference_config = LacamInferenceConfig()
-        expert_algorithm = LacamInference
-    else:
-        raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
+    expert_algorithm, inference_config = get_expert_algorithm_and_config(args)
 
     run_name = f"{args.test_name}_{args.expert_algorithm}"
     wandb.init(

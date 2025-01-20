@@ -117,6 +117,11 @@ def get_expert_algorithm_and_config(args):
 
         inference_config = PIBTInferenceConfig()
         expert_algorithm = PIBTInference
+    elif args.expert_algorithm == "PIBTDistance":
+        from pibt.inference import PIBTDistanceBasedInference, PIBTInferenceConfig
+
+        inference_config = PIBTInferenceConfig()
+        expert_algorithm = PIBTDistanceBasedInference
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
     return expert_algorithm, inference_config
