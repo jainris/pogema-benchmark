@@ -5,11 +5,11 @@ import numpy as np
 import pathlib
 
 from pibt.pypibt.pibt import PIBT
-from pibt.pypibt.mapf_utils import is_valid_coord
 
 import agents
 import runtime_data_generation
-from utils import get_collision_shielding_args_from_str
+from cs_utils import get_collision_shielding_args_from_str
+from utils import get_neighbors
 
 
 class BaseCollisionShielding:
@@ -69,29 +69,6 @@ class NaiveCollisionShielding(BaseCollisionShielding):
         # So just returning the actions given by the model
         actions = self.model(gdata.x, gdata)
         return self.shield(actions)
-
-
-def get_neighbors(grid, coord, moves):
-    # coord: y, x
-    neigh = []
-    move_idx = []
-    mask = []
-
-    # check valid input
-    if not is_valid_coord(grid, coord):
-        return neigh, move_idx
-
-    y, x = coord
-
-    for i, (dy, dx) in enumerate(moves):
-        if is_valid_coord(grid, (y + dy, x + dx)):
-            neigh.append((y + dy, x + dx))
-            move_idx.append(i)
-            mask.append(True)
-        else:
-            mask.append(False)
-
-    return neigh, move_idx, mask
 
 
 class PIBTInstance(PIBT):

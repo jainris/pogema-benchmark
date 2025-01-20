@@ -9,7 +9,7 @@ from generate_hypergraphs import generate_hypergraph_indices
 from generate_target_vec import generate_target_vec
 from imitation_dataset_pyg import MAPFGraphDataset, MAPFHypergraphDataset
 
-from collision_shielding import get_neighbors
+from utils import get_neighbors
 from pibt_training import get_relevance_from_inverse_relevances
 
 

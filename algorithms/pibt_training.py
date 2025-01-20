@@ -9,7 +9,7 @@ from grid_config_generator import add_grid_config_args, grid_config_generator_fa
 
 from pibt.pypibt.pibt import PIBT
 from pogema_toolbox.algorithm_config import AlgoBase
-from collision_shielding import get_neighbors
+from utils import get_neighbors
 
 from run_expert import add_expert_dataset_args, get_expert_dataset_file_name
 
