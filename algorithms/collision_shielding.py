@@ -8,7 +8,7 @@ from pibt.pypibt.pibt import PIBT
 
 import agents
 import runtime_data_generation
-from cs_utils import get_collision_shielding_args_from_str
+import cs_utils
 from utils import get_neighbors
 
 
@@ -325,7 +325,7 @@ class ModelBasedCollisionShielding(BaseCollisionShielding):
                 ModelBasedCollisionShielding.dataset_kwargs,
             )
 
-        args = get_collision_shielding_args_from_str(shielding_model_args)
+        args = cs_utils.get_collision_shielding_args_from_str(shielding_model_args)
         model, hypergraph_model, dataset_kwargs = agents.get_model(args, device)
         model.in_simulation(True)
 
