@@ -422,6 +422,15 @@ def get_collision_shielded_model(model, env, args, rt_data_generator=None):
             rt_data_generator=rt_data_generator,
             dist_priorities=True,
         )
+    elif collision_shielding == "model":
+        return ModelBasedCollisionShielding(
+            model=model,
+            env=env,
+            sampling_method=args.sampling_method,
+            rt_data_generator=rt_data_generator,
+            shielding_model_args=args.collision_shielding_args,
+            model_epoch_num=args.collision_shielding_model_epoch_num,
+        )
     else:
         raise ValueError(
             f"Unsupported collision shielding method: {collision_shielding}."

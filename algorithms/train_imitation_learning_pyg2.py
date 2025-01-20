@@ -160,7 +160,7 @@ def add_training_args(parser):
     )
     parser.add_argument("--pairwise_loss", type=str, default="logistic")
     parser.add_argument("--collision_shielding_args", type=str, default="")
-    parser.add_argument("--collision_shielding_model_epoch", type=str, default=None)
+    parser.add_argument("--collision_shielding_model_epoch_num", type=str, default=None)
 
     return parser
 
