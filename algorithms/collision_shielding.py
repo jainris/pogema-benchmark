@@ -7,7 +7,7 @@ import pathlib
 from pibt.pypibt.pibt import PIBT
 from pibt.pypibt.mapf_utils import is_valid_coord
 
-from agents import get_model
+import agents
 from utils import get_collision_shielding_args_from_str
 from runtime_data_generation import get_runtime_data_generator
 
@@ -347,7 +347,7 @@ class ModelBasedCollisionShielding(BaseCollisionShielding):
             )
 
         args = get_collision_shielding_args_from_str(shielding_model_args)
-        model, hypergraph_model, dataset_kwargs = get_model(args, device)
+        model, hypergraph_model, dataset_kwargs = agents.get_model(args, device)
         model.in_simulation(True)
 
         if model_epoch_num is None:
