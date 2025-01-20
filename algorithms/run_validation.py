@@ -70,7 +70,7 @@ def main():
 
     run_name = args.run_name
     if args.additional_run_name is not None:
-        run_name = run_name + args.additional_run_name
+        run_name = run_name + "_" + args.additional_run_name
 
     wandb.init(
         project="hyper-mapf-pogema",
