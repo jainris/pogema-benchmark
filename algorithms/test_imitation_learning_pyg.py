@@ -12,7 +12,7 @@ import torch
 
 from run_expert import add_expert_dataset_args
 
-from train_imitation_learning_pyg2 import add_training_args
+from training_args import add_training_args
 from convert_to_imitation_dataset import add_imitation_dataset_args
 from generate_hypergraphs import add_hypergraph_generation_args
 from agents import run_model_on_grid, get_model
