@@ -1,25 +1,46 @@
+from typing import Optional
+
 import torch
 import numpy as np
+import pathlib
+
 from pibt.pypibt.pibt import PIBT
 from pibt.pypibt.mapf_utils import is_valid_coord
 
+from agents import get_model
+from utils import get_collision_shielding_args_from_str
+from runtime_data_generation import get_runtime_data_generator
+
 
 class BaseCollisionShielding:
-    def __init__(self, model, env, sampling_method="deterministic"):
+    def __init__(
+        self, model, env, sampling_method="deterministic", rt_data_generator=None
+    ):
         self.model = model
         self.env = env
         self.sampling_method = sampling_method
+        self.rt_data_generator = rt_data_generator
+        self.device = model.device
 
     def in_simulation(self, value):
         self.model.in_simulation(value)
 
-    def get_actions(self, gdata):
+    def get_actions(self, observations):
+        if self.rt_data_generator is not None:
+            gdata = self.rt_data_generator(observations, self.env).to(self.device)
+        else:
+            gdata = observations
+        return self._get_actions(gdata)
+
+    def _get_actions(self, gdata):
         raise NotImplementedError
 
 
 class NaiveCollisionShielding(BaseCollisionShielding):
-    def __init__(self, model, env, sampling_method="deterministic"):
-        super().__init__(model, env, sampling_method)
+    def __init__(
+        self, model, env, sampling_method="deterministic", rt_data_generator=None
+    ):
+        super().__init__(model, env, sampling_method, rt_data_generator)
         if self.sampling_method == "probabilistic":
             self.rng = np.random.default_rng(seed=env.grid_config.seed)
 
@@ -43,7 +64,7 @@ class NaiveCollisionShielding(BaseCollisionShielding):
             raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
         return actions
 
-    def get_actions(self, gdata):
+    def _get_actions(self, gdata):
         # Naive collision shielding leaves the shielding to the env
         # So just returning the actions given by the model
         actions = self.model(gdata.x, gdata)
@@ -217,9 +238,14 @@ class PIBTInstanceDist(PIBTInstance):
 
 class PIBTCollisionShielding(BaseCollisionShielding):
     def __init__(
-        self, model, env, sampling_method="deterministic", dist_priorities=False
+        self,
+        model,
+        env,
+        sampling_method="deterministic",
+        rt_data_generator=None,
+        dist_priorities=False,
     ):
-        super().__init__(model, env, sampling_method)
+        super().__init__(model, env, sampling_method, rt_data_generator)
 
         obstacles = env.grid.get_obstacles(ignore_borders=True)
         starts = env.grid.get_agents_xy(ignore_borders=True)
@@ -247,7 +273,7 @@ class PIBTCollisionShielding(BaseCollisionShielding):
                 sampling_method=sampling_method,
             )
 
-    def get_actions(self, gdata):
+    def _get_actions(self, gdata):
         actions = self.model(gdata.x, gdata)
         if self.sampling_method == "probabilistic":
             actions = torch.nn.functional.softmax(actions, dim=-1)
@@ -256,19 +282,136 @@ class PIBTCollisionShielding(BaseCollisionShielding):
         return actions
 
 
-def get_collision_shielded_model(model, env, args):
+class ModelBasedCollisionShielding(BaseCollisionShielding):
+    # Maintaining a static variable so that we don't need to reload
+    # the model multiple times
+    shielding_model: Optional[torch.nn.Module] = None
+    hypergraph_model: Optional[bool] = None
+    dataset_kwargs: Optional[dict] = None
+    args = None
+
+    def __init__(
+        self,
+        model,
+        env,
+        sampling_method,
+        rt_data_generator,
+        shielding_model_args,
+        model_epoch_num,
+    ):
+        super().__init__(model, env, sampling_method, rt_data_generator)
+
+        assert rt_data_generator is not None
+
+        self.shielding_model_args = shielding_model_args
+        self.shielding_model, self.hypergraph_model, self.dataset_kwargs = (
+            self.load_shielding_model(
+                shielding_model_args, model_epoch_num, device=model.device
+            )
+        )
+        self.wrapped_collision_shield = NaiveCollisionShielding(
+            model=model, env=env, sampling_method="probabilistic"
+        )
+
+        if self.sampling_method == "probabilistic":
+            self.rng = torch.Generator(device=model.device)
+            self.rng = self.rng.manual_seed(env.grid_config.seed)
+        self.collision_shield_rtdg = get_runtime_data_generator(
+            grid_config=env.grid_config,
+            args=self.args,
+            hypergraph_model=self.hypergraph_model,
+            dataset_kwargs=self.dataset_kwargs,
+            use_target_vec=self.args.use_target_vec,
+            custom_relevance=True,
+        )
+        self.relevance_pipe = self.collision_shield_rtdg.generators[
+            "relevances"
+        ].set_relevance
+
+    def load_shielding_model(
+        self,
+        shielding_model_args,
+        model_epoch_num,
+        device,
+        save_model_for_reuse=True,
+        force_reload=False,
+    ):
+        if (not force_reload) and (
+            ModelBasedCollisionShielding.shielding_model is not None
+        ):
+            self.args = ModelBasedCollisionShielding.args
+            return (
+                ModelBasedCollisionShielding.shielding_model,
+                ModelBasedCollisionShielding.hypergraph_model,
+                ModelBasedCollisionShielding.dataset_kwargs,
+            )
+
+        args = get_collision_shielding_args_from_str(shielding_model_args)
+        model, hypergraph_model, dataset_kwargs = get_model(args, device)
+        model.in_simulation(True)
+
+        if model_epoch_num is None:
+            checkpoint_path = pathlib.Path(args.checkpoints_dir, "best.pt")
+            if not checkpoint_path.exists():
+                checkpoint_path = pathlib.Path(args.checkpoints_dir, "best_low_val.pt")
+        else:
+            checkpoint_path = pathlib.Path(
+                args.checkpoints_dir, f"epoch_{model_epoch_num}.pt"
+            )
+
+        state_dict = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(state_dict)
+        model = model.eval()
+
+        if save_model_for_reuse:
+            ModelBasedCollisionShielding.args = args
+            self.args = args
+            ModelBasedCollisionShielding.shielding_model = model
+            ModelBasedCollisionShielding.hypergraph_model = hypergraph_model
+            ModelBasedCollisionShielding.dataset_kwargs = dataset_kwargs
+        return model, hypergraph_model, dataset_kwargs
+
+    def run_shielding_model(self, actions, observations):
+        self.relevance_pipe(actions)
+        gdata = self.collision_shield_rtdg(observations, self.env).to(self.device)
+        return self.shielding_model(gdata.x, gdata)
+
+    def get_actions(self, observations):
+        gdata = self.rt_data_generator(observations, self.env).to(self.device)
+
+        actions = self.model(gdata.x, gdata)
+        if self.sampling_method == "deterministic":
+            actions = torch.argsort(actions, dim=-1, descending=True)
+        elif self.sampling_method == "probabilistic":
+            actions = torch.nn.functional.softmax(actions, dim=-1)
+            actions = torch.multinomial(
+                actions,
+                num_samples=actions.shape[-1],
+                replacement=False,
+                generator=self.rng,
+            )
+
+        actions = self.run_shielding_model(actions, observations)
+        return self.wrapped_collision_shield.shield(actions)
+
+
+def get_collision_shielded_model(model, env, args, rt_data_generator=None):
     collision_shielding = "naive"
     if "collision_shielding" in vars(args):
         collision_shielding = args.collision_shielding
     if collision_shielding == "naive":
         return NaiveCollisionShielding(
-            model=model, env=env, sampling_method=args.action_sampling
+            model=model,
+            env=env,
+            sampling_method=args.action_sampling,
+            rt_data_generator=rt_data_generator,
         )
     elif collision_shielding == "pibt":
         return PIBTCollisionShielding(
             model=model,
             env=env,
             sampling_method=args.action_sampling,
+            rt_data_generator=rt_data_generator,
             dist_priorities=False,
         )
     elif collision_shielding == "pibt-dist":
@@ -276,6 +419,7 @@ def get_collision_shielded_model(model, env, args):
             model=model,
             env=env,
             sampling_method=args.action_sampling,
+            rt_data_generator=rt_data_generator,
             dist_priorities=True,
         )
     else:

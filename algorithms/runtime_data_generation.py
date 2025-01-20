@@ -85,7 +85,7 @@ def get_hyperindices_generator(
     return _generator, "hyperedge_indices"
 
 
-class RelevanceGeneator:
+class RelevanceGenerator:
     def __init__(self, moves):
         self.dist_tables = None
         self.grid = None
@@ -117,12 +117,33 @@ class RelevanceGeneator:
         return [relevances]
 
 
+class CustomRelevanceGenerator:
+    def __init__(self, one_hot=True):
+        self.relevances = None
+        self.one_hot = one_hot
+
+    def set_relevance(self, relevances):
+        self.relevances = relevances
+
+    def __call__(self, observations, env):
+        relevances = self.relevances
+        if self.one_hot:
+            relevances = torch.nn.functional.one_hot(
+                relevances, num_classes=relevances.shape[-1]
+            )
+            relevances = relevances.reshape(
+                (relevances.shape[0], relevances.shape[1] * relevances.shape[2])
+            ).to(torch.float)
+        return [relevances]
+
+
 def get_runtime_data_generator(
     grid_config,
     args,
     hypergraph_model,
     dataset_kwargs,
     use_target_vec,
+    custom_relevance=False,
 ) -> BaseRuntimeDataGeneration:
     rt_data_generator = BaseRuntimeDataGeneration(
         hypergraph_model, edge_attr_opts=args.edge_attr_opts, **dataset_kwargs
@@ -147,9 +168,15 @@ def get_runtime_data_generator(
         )
         rt_data_generator.register_datagenerator(key, generator)
 
-    if args.use_relevances is not None:
+    if custom_relevance:
         key = "relevances"
-        generator = RelevanceGeneator(moves=np.array(grid_config.MOVES))
+        generator = CustomRelevanceGenerator()
+
+        rt_data_generator.register_datagenerator(key, generator)
+        rt_data_generator.register_params("use_relevances", "straight")
+    elif args.use_relevances is not None:
+        key = "relevances"
+        generator = RelevanceGenerator(moves=np.array(grid_config.MOVES))
 
         rt_data_generator.register_datagenerator(key, generator)
         rt_data_generator.register_params("use_relevances", args.use_relevances)

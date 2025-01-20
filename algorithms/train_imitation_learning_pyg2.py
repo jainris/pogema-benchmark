@@ -159,6 +159,8 @@ def add_training_args(parser):
         "--pass_cnn_output_to_gnn2", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument("--pairwise_loss", type=str, default="logistic")
+    parser.add_argument("--collision_shielding_args", type=str, default="")
+    parser.add_argument("--collision_shielding_model_epoch", type=str, default=None)
 
     return parser
 
