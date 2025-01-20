@@ -8,8 +8,8 @@ from pibt.pypibt.pibt import PIBT
 from pibt.pypibt.mapf_utils import is_valid_coord
 
 import agents
+import runtime_data_generation
 from utils import get_collision_shielding_args_from_str
-from runtime_data_generation import get_runtime_data_generator
 
 
 class BaseCollisionShielding:
@@ -316,7 +316,7 @@ class ModelBasedCollisionShielding(BaseCollisionShielding):
         if self.sampling_method == "probabilistic":
             self.rng = torch.Generator(device=model.device)
             self.rng = self.rng.manual_seed(env.grid_config.seed)
-        self.collision_shield_rtdg = get_runtime_data_generator(
+        self.collision_shield_rtdg = runtime_data_generation.get_runtime_data_generator(
             grid_config=env.grid_config,
             args=self.args,
             hypergraph_model=self.hypergraph_model,
