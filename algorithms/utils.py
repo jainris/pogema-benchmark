@@ -2,7 +2,7 @@ import argparse
 from convert_to_imitation_dataset import add_imitation_dataset_args
 from generate_hypergraphs import add_hypergraph_generation_args
 from run_expert import add_expert_dataset_args
-from train_imitation_learning_pyg2 import add_training_args
+import train_imitation_learning_pyg2
 
 
 class SansPrefixDict:
@@ -29,7 +29,7 @@ def get_collision_shielding_args_from_str(collision_shielding_args: str):
     parser = add_expert_dataset_args(parser)
     parser = add_imitation_dataset_args(parser)
     parser = add_hypergraph_generation_args(parser)
-    parser = add_training_args(parser)
+    parser = train_imitation_learning_pyg2.add_training_args(parser)
 
     return parser.parse_args(collision_shielding_args.split(" "))
 
