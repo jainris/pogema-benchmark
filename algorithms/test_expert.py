@@ -126,7 +126,7 @@ def main():
     wandb.init(
         project="hyper-mapf-pogema-test",
         name=run_name,
-        config=vars(args),
+        config=vars(args) | {"expert": True},
         entity="jainris",
     )
 
