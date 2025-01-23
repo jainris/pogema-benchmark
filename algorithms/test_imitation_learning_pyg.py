@@ -247,6 +247,7 @@ def main():
             dataset_kwargs=dataset_kwargs,
             use_target_vec=args.use_target_vec,
             aux_func=aux_func,
+            animation_monitor=args.svg_save_dir is not None,
         )
         makespan = aux_func.makespan
         flowtime = aux_func.flowtime
