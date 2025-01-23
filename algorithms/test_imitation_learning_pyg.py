@@ -69,6 +69,8 @@ def main():
     )
     parser.add_argument("--test_min_dist", type=int, default=None)
 
+    parser.add_argument("--svg_save_dir", type=str, default=None)
+
     args = parser.parse_args()
     print(args)
 
@@ -186,16 +188,40 @@ def main():
         model.load_state_dict(state_dict)
     model = model.eval()
 
-    def aux_func(env, observations, actions):
-        if actions is None:
-            aux_func.original_pos = np.array([obs["global_xy"] for obs in observations])
-            aux_func.makespan = 0
-            aux_func.flowtime = np.zeros(env.get_num_agents())
-        else:
-            new_pos = np.array([obs["global_xy"] for obs in observations])
-            aux_func.makespan += 1
-            aux_func.flowtime += np.any(aux_func.original_pos != new_pos, axis=-1)
-            aux_func.original_pos = new_pos
+    if args.svg_save_dir is None:
+
+        def aux_func(env, observations, actions, **kwargs):
+            if actions is None:
+                aux_func.original_pos = np.array(
+                    [obs["global_xy"] for obs in observations]
+                )
+                aux_func.makespan = 0
+                aux_func.flowtime = np.zeros(env.get_num_agents())
+            else:
+                new_pos = np.array([obs["global_xy"] for obs in observations])
+                aux_func.makespan += 1
+                aux_func.flowtime += np.any(aux_func.original_pos != new_pos, axis=-1)
+                aux_func.original_pos = new_pos
+
+    else:
+        file_path = pathlib.Path(args.svg_save_dir)
+        file_path.mkdir(parents=True, exist_ok=True)
+
+        def aux_func(env, observations, actions, rtdg, **kwargs):
+            if actions is None:
+                aux_func.original_pos = np.array(
+                    [obs["global_xy"] for obs in observations]
+                )
+                aux_func.makespan = 0
+                aux_func.flowtime = np.zeros(env.get_num_agents())
+                aux_func.edge_index = []
+            else:
+                new_pos = np.array([obs["global_xy"] for obs in observations])
+                aux_func.makespan += 1
+                aux_func.flowtime += np.any(aux_func.original_pos != new_pos, axis=-1)
+                aux_func.original_pos = new_pos
+            gdata = rtdg(observations, env)
+            aux_func.edge_index.append(gdata.edge_index.detach().cpu().numpy())
 
     num_completed = 0
     num_tested = 0
@@ -258,6 +284,14 @@ def main():
             }
 
         wandb.log(results)
+
+        if args.svg_save_dir is not None:
+            file_path = pathlib.Path(f"{args.svg_save_dir}", f"anim_{i}.svg")
+            env.save_animation(file_path)
+
+            file_path = pathlib.Path(f"{args.svg_save_dir}", f"edge_index_{i}.svg")
+            with open(file_path, "wb") as f:
+                pickle.dump(aux_func.edge_index, f)
 
         print(
             f"Testing Graph {i + 1}/{len(seeds)}, "

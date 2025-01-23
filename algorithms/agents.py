@@ -2,7 +2,7 @@ from typing import Sequence
 from collections import OrderedDict
 import math
 
-from pogema import pogema_v0
+from pogema import pogema_v0, AnimationMonitor
 
 import torch
 import torch.nn.functional as F
@@ -1108,14 +1108,14 @@ def run_model_on_grid(
     use_target_vec,
     max_episodes=None,
     aux_func=None,
+    animation_monitor=False,
 ):
     env = pogema_v0(grid_config=grid_config)
+    if animation_monitor:
+        env = AnimationMonitor(env)
     observations, infos = env.reset()
 
     model.in_simulation(True)
-
-    if aux_func is not None:
-        aux_func(env=env, observations=observations, actions=None)
 
     rt_data_generator = get_runtime_data_generator(
         grid_config=grid_config,
@@ -1124,6 +1124,12 @@ def run_model_on_grid(
         dataset_kwargs=dataset_kwargs,
         use_target_vec=use_target_vec,
     )
+
+    if aux_func is not None:
+        aux_func(
+            env=env, observations=observations, actions=None, rtdg=rt_data_generator
+        )
+
     model = get_collision_shielded_model(
         model, env, args, rt_data_generator=rt_data_generator
     )
@@ -1133,7 +1139,12 @@ def run_model_on_grid(
         observations, rewards, terminated, truncated, infos = env.step(actions)
 
         if aux_func is not None:
-            aux_func(env=env, observations=observations, actions=actions)
+            aux_func(
+                env=env,
+                observations=observations,
+                actions=actions,
+                rtdg=rt_data_generator,
+            )
 
         if all(terminated) or all(truncated):
             break
