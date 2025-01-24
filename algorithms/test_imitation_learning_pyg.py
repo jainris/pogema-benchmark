@@ -290,7 +290,7 @@ def main():
             file_path = pathlib.Path(f"{args.svg_save_dir}", f"anim_{i}.svg")
             env.save_animation(file_path)
 
-            file_path = pathlib.Path(f"{args.svg_save_dir}", f"edge_index_{i}.svg")
+            file_path = pathlib.Path(f"{args.svg_save_dir}", f"edge_index_{i}.pkl")
             with open(file_path, "wb") as f:
                 pickle.dump(aux_func.edge_index, f)
 

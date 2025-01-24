@@ -834,6 +834,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         intmd_training=False,
         intmd_training_output_sizes=None,
         pass_cnn_output_to_gnn2=False,
+        test_wrt_intmd=None,
     ):
         super().__init__()
 
@@ -988,6 +989,10 @@ class AgentWithTwoNetworks(torch.nn.Module):
         if intmd_training:
             assert parallel_or_series == "series"
             assert intmd_training_output_sizes is not None
+            self.test_wrt_intmd = test_wrt_intmd
+            if test_wrt_intmd is not None:
+                assert intmd_training_output_sizes[test_wrt_intmd] == num_classes
+            self.return_intmd_res = False
 
             intmd_output_generators = []
 
@@ -1044,7 +1049,12 @@ class AgentWithTwoNetworks(torch.nn.Module):
                     lin.reset_parameters()
 
     def in_simulation(self, value):
-        self.generate_intmd_outputs = not value
+        if value and (self.test_wrt_intmd is not None):
+            self.return_intmd_res = True
+            self.generate_intmd_outputs = True
+        else:
+            self.generate_intmd_outputs = not value
+            self.return_intmd_res = False
 
     @property
     def device(self):
@@ -1093,6 +1103,9 @@ class AgentWithTwoNetworks(torch.nn.Module):
                         x = F.dropout(x, p=0.2, training=self.training)
                     x = lin(x)
                 outputs += [x]
+            if self.return_intmd_res:
+                # Adding one to ignore the gnn2 output
+                return outputs[self.test_wrt_intmd + 1]
             return tuple(outputs)
 
         return x
@@ -1419,6 +1432,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
             intmd_training=intmd_training,
             intmd_training_output_sizes=intmd_output_sizes,
             pass_cnn_output_to_gnn2=args.pass_cnn_output_to_gnn2,
+            test_wrt_intmd=args.test_wrt_intmd,
         ).to(device)
         model.reset_parameters()
     else:

@@ -119,4 +119,6 @@ def add_training_args(parser):
     parser.add_argument("--collision_shielding_args", type=str, default="")
     parser.add_argument("--collision_shielding_model_epoch_num", type=str, default=None)
 
+    parser.add_argument("--test_wrt_intmd", type=int, default=None)
+
     return parser
