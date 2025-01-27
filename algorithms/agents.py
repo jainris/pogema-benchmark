@@ -1051,15 +1051,12 @@ class AgentWithTwoNetworks(torch.nn.Module):
         self.generate_intmd_outputs = True
 
         self.cnn_to_out_lin = None
-        self.cnn_to_gnn2_lin = None
         self.gnn1_to_out_lin = None
         for res in module_residual:
             if res == "cnn-to-out":
                 self.cnn_to_out_lin = torch.nn.Linear(
                     cnn_output_size, actions_mlp_sizes[0]
                 )
-            elif res == "cnn-to-gnn2":
-                self.cnn_to_gnn2_lin = torch.nn.Linear(cnn_output_size, gnn2_input_size)
             elif res == "gnn1-to-out":
                 self.gnn1_to_out_lin = torch.nn.Linear(
                     num_attention_heads * gnn1_last_embd_sz, actions_mlp_sizes[0]
@@ -1082,7 +1079,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 for lin in mlp:
                     lin.reset_parameters()
 
-        for res in [self.cnn_to_out_lin, self.cnn_to_gnn2_lin, self.gnn1_to_out_lin]:
+        for res in [self.cnn_to_out_lin, self.gnn1_to_out_lin]:
             if res is not None:
                 res.reset_parameters()
 
@@ -1112,10 +1109,6 @@ class AgentWithTwoNetworks(torch.nn.Module):
         else:
             gnn2_out = gnn1_out
 
-        if self.cnn_to_gnn2_lin is not None:
-            res_out = self.cnn_to_gnn2_lin(cnn_out)
-            res_out = F.relu(res_out)
-            gnn2_out = res_out + gnn2_out
         if self.pass_cnn_output_to_gnn2:
             gnn2_out = torch.concatenate([gnn2_out, x], dim=-1)
 
