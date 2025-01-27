@@ -36,6 +36,8 @@ def main():
     parser = add_hypergraph_generation_args(parser)
     parser = add_training_args(parser)
     parser.add_argument("--additional_run_name", type=str, default=None)
+    parser.add_argument("--project_name", type=str, default="hyper-mapf-pogema")
+    parser.add_argument("--num_validation_maps", type=int, default=None)
 
     args = parser.parse_args()
     print(args)
@@ -73,7 +75,7 @@ def main():
         run_name = run_name + "_" + args.additional_run_name
 
     wandb.init(
-        project="hyper-mapf-pogema",
+        project=args.project_name,
         name=run_name,
         config=vars(args) | {"validation_run": True},
         entity="jainris",
@@ -83,7 +85,12 @@ def main():
     train_id_max = int(
         args.num_samples * (1 - args.validation_fraction - args.test_fraction)
     )
-    validation_id_max = train_id_max + int(args.num_samples * args.validation_fraction)
+    if args.num_validation_maps is not None:
+        validation_id_max = train_id_max + args.num_validation_maps
+    else:
+        validation_id_max = train_id_max + int(
+            args.num_samples * args.validation_fraction
+        )
 
     print("Starting Validation....")
     for epoch in range(
