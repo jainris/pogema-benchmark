@@ -57,6 +57,8 @@ def get_hypergraph_file_name(args):
         file_name = "default.pkl"
     if args.generate_graph_from_hyperedges:
         file_name = file_name[:-4] + "_graph.pkl"
+    if args.pibt_expert_relevance_training:
+        file_name = file_name[:-4] + "_pibt_relevance.pkl"
     return file_name
 
 

@@ -17,6 +17,8 @@ def get_target_vec_file_name(args):
     dict_args = vars(args)
     for key in sorted(DATASET_FILE_NAME_KEYS):
         file_name += f"_{key}_{dict_args[key]}"
+    if args.pibt_expert_relevance_training:
+        file_name += "_pibt_relevance"
     file_name = file_name[1:] + ".pkl"
     return file_name
 

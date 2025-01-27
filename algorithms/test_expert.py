@@ -33,6 +33,8 @@ def get_expert_file_name(dict_args):
     for key in sorted(EXPERT_FILE_NAME_KEYS):
         if dict_args[key] is not None:
             file_name += f"_{key}_{dict_args[key]}"
+    if dict_args["pibt_expert_relevance_training"]:
+        file_name += "_pibt_relevance"
     file_name = file_name[1:] + ".pkl"
     return file_name
 

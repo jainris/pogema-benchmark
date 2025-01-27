@@ -21,6 +21,8 @@ def get_legacy_pos_file_name(args):
         file_name += f"_{key}_{dict_args[key]}"
     if args.use_edge_attr:
         file_name += "_pos"
+    if args.pibt_expert_relevance_training:
+        file_name += "_pibt_relevance"
     file_name = file_name[1:] + ".pkl"
     return file_name
 
