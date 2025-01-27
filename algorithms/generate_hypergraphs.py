@@ -6,6 +6,7 @@ import torch
 
 from pogema import pogema_v0, GridConfig
 from scipy.spatial.distance import squareform, pdist
+from sklearn.cluster import KMeans
 
 from run_expert import (
     DATASET_FILE_NAME_KEYS,
@@ -18,6 +19,8 @@ from run_expert import (
 HYPERGRAPH_FILE_NAME_DEFAULTS = {
     "hypergraph_greedy_distance": 2,
     "hypergraph_num_steps": 3,
+    "hypergraph_max_group_size": None,
+    "hypergraph_min_overlap": None,
 }
 HYPERGRAPH_FILE_NAME_KEYS = list(HYPERGRAPH_FILE_NAME_DEFAULTS.keys())
 
@@ -33,6 +36,9 @@ def add_hypergraph_generation_args(parser):
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    parser.add_argument("--hypergraph_max_group_size", type=int, default=None)
+    parser.add_argument("--hypergraph_min_overlap", type=int, default=None)
+
     return parser
 
 
@@ -156,7 +162,7 @@ def update_groups(agent_pos, groups, hypergraph_greedy_distance):
 
 def get_unique_groups(groups):
     unique_groups = []
-    for group in groups.values():
+    for group in groups:
         unique = True
         for g in unique_groups:
             if g == group:
@@ -178,12 +184,54 @@ def generate_graph_instead(unique_groups, num_agents, remove_self_loops=True):
     return Adj.nonzero().t()
 
 
+def break_group(group, max_group_size, overlap_size, agent_pos):
+    n_clusters = (len(group) + (max_group_size - overlap_size) - 1) // (
+        max_group_size - overlap_size
+    )
+    num_agents = agent_pos.shape[0]
+    clusterer = KMeans(n_clusters=n_clusters, max_iter=50).fit(agent_pos)
+
+    centres = clusterer.cluster_centers_
+    centres = np.round(centres)
+
+    assignments = np.zeros((n_clusters, num_agents), dtype=int)
+    assignments[clusterer.labels_, np.arange(num_agents)] = 1
+
+    dist = np.expand_dims(agent_pos, axis=0) - np.expand_dims(centres, axis=1)
+    dist = np.sum(np.abs(dist), axis=-1)
+    idx = np.argsort(dist * np.where(assignments, -np.inf, 1), axis=-1)[
+        :, :max_group_size
+    ]
+    np.put_along_axis(assignments, idx, values=1, axis=-1)
+
+    return [set(np.nonzero(assign)[0]) for assign in assignments]
+
+
+def enforce_group_sizes(groups, max_group_size, overlap_size, agent_pos):
+    new_groups = []
+    for group in groups:
+        if len(group) > max_group_size:
+            new_groups.extend(
+                break_group(
+                    group,
+                    max_group_size=max_group_size,
+                    overlap_size=overlap_size,
+                    agent_pos=agent_pos,
+                )
+            )
+        else:
+            new_groups.append(group)
+    return new_groups
+
+
 def generate_hypergraph_indices(
     env,
     hypergraph_greedy_distance,
     hypergraph_num_steps,
     move_results,
     generate_graph=False,
+    max_group_size=None,
+    overlap_size=None,
 ):
     target_pos = np.array(env.grid.get_targets_xy())
     agent_pos = np.array(env.grid.get_agents_xy())
@@ -195,6 +243,15 @@ def generate_hypergraph_indices(
     for _ in range(hypergraph_num_steps):
         _, agent_pos = greedy_step(target_pos, agent_pos, obstacles, move_results)
         groups = update_groups(agent_pos, groups, hypergraph_greedy_distance)
+    groups = groups.values()
+    if max_group_size is not None:
+        groups = enforce_group_sizes(
+            groups=groups,
+            max_group_size=max_group_size,
+            overlap_size=overlap_size,
+            agent_pos=agent_pos,
+        )
+
     unique_groups = get_unique_groups(groups)
 
     if generate_graph:
