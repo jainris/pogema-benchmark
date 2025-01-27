@@ -199,9 +199,7 @@ def break_group(group, max_group_size, overlap_size, agent_pos):
 
     dist = np.expand_dims(agent_pos, axis=0) - np.expand_dims(centres, axis=1)
     dist = np.sum(np.abs(dist), axis=-1)
-    idx = np.argsort(dist * np.where(assignments, -np.inf, 1), axis=-1)[
-        :, :max_group_size
-    ]
+    idx = np.argsort(np.where(assignments, -np.inf, dist), axis=-1)[:, :max_group_size]
     np.put_along_axis(assignments, idx, values=1, axis=-1)
 
     return [set(np.nonzero(assign)[0]) for assign in assignments]
