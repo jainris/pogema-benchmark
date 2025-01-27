@@ -348,6 +348,8 @@ def main():
                 args.hypergraph_num_steps,
                 move_results,
                 args.generate_graph_from_hyperedges,
+                args.hypergraph_max_group_size,
+                args.hypergraph_min_overlap,
             )
 
             all_hypergraphs.append(hypergraph_index)

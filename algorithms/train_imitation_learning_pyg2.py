@@ -293,6 +293,8 @@ def main():
             hypergraph_num_steps=args.hypergraph_num_steps,
             move_results=move_results,
             generate_graph=args.generate_graph_from_hyperedges,
+            max_group_size=args.hypergraph_max_group_size,
+            overlap_size=args.hypergraph_min_overlap,
         )
 
     queue = mp.Queue()

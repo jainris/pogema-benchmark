@@ -71,6 +71,8 @@ def get_hyperindices_generator(
     hypergraph_num_steps,
     move_results,
     generate_graph_from_hyperedges,
+    max_group_size,
+    overlap_size,
 ):
     def _generator(observations, env):
         hindex = generate_hypergraph_indices(
@@ -79,6 +81,8 @@ def get_hyperindices_generator(
             hypergraph_num_steps,
             move_results,
             generate_graph_from_hyperedges,
+            max_group_size=max_group_size,
+            overlap_size=overlap_size,
         )
         return [hindex]
 
@@ -165,6 +169,8 @@ def get_runtime_data_generator(
             hypergraph_num_steps=args.hypergraph_num_steps,
             move_results=np.array(grid_config.MOVES),
             generate_graph_from_hyperedges=args.generate_graph_from_hyperedges,
+            max_group_size=args.hypergraph_max_group_size,
+            overlap_size=args.hypergraph_min_overlap,
         )
         rt_data_generator.register_datagenerator(key, generator)
 
