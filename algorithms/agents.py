@@ -656,6 +656,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         use_relevances=None,
         pre_gnn_embedding_size=None,
         pre_gnn_num_mlp_layers=None,
+        module_residual=[],
     ):
         super().__init__()
 
@@ -782,6 +783,15 @@ class DecentralPlannerGATNet(torch.nn.Module):
         self.use_dropout = use_dropout
         self.actionsMLP = torch.nn.ModuleList(actionsfc)
 
+        self.cnn_to_out_lin = None
+        for res in module_residual:
+            if res == "cnn-to-out":
+                self.cnn_to_out_lin = torch.nn.Linear(
+                    cnn_output_size, actions_mlp_sizes[0]
+                )
+            else:
+                raise ValueError(f"Unsupported module_residual: {res}.")
+
     def reset_parameters(self):
         self.cnn.reset_parameters()
         self.gnn_pre_processor.reset_parameters()
@@ -789,6 +799,8 @@ class DecentralPlannerGATNet(torch.nn.Module):
             gnn.reset_parameters()
         for lin in self.actionsMLP:
             lin.reset_parameters()
+        if self.cnn_to_out_lin is not None:
+            self.cnn_to_out_lin.reset_parameters()
 
     def in_simulation(self, value):
         pass
@@ -798,11 +810,15 @@ class DecentralPlannerGATNet(torch.nn.Module):
         return next(self.parameters()).device
 
     def forward(self, x, data):
-        x = self.cnn(x)
-        x = self.gnn_pre_processor(x, data)
+        cnn_out = self.cnn(x)
+        x = self.gnn_pre_processor(cnn_out, data)
         for conv in self.gnns:
             x = conv(x, data)
             x = F.relu(x)
+        if self.cnn_to_out_lin is not None:
+            res_out = self.cnn_to_out_lin(cnn_out)
+            res_out = F.relu(res_out)
+            x = res_out + x
         for lin in self.actionsMLP[:-1]:
             x = lin(x)
             x = F.relu(x)
@@ -835,6 +851,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         intmd_training_output_sizes=None,
         pass_cnn_output_to_gnn2=False,
         test_wrt_intmd=None,
+        module_residual=[],
     ):
         super().__init__()
 
@@ -1033,6 +1050,23 @@ class AgentWithTwoNetworks(torch.nn.Module):
 
         self.generate_intmd_outputs = True
 
+        self.cnn_to_out_lin = None
+        self.cnn_to_gnn2_lin = None
+        self.gnn1_to_out_lin = None
+        for res in module_residual:
+            if res == "cnn-to-out":
+                self.cnn_to_out_lin = torch.nn.Linear(
+                    cnn_output_size, actions_mlp_sizes[0]
+                )
+            elif res == "cnn-to-gnn2":
+                self.cnn_to_gnn2_lin = torch.nn.Linear(cnn_output_size, gnn2_input_size)
+            elif res == "gnn1-to-out":
+                self.gnn1_to_out_lin = torch.nn.Linear(
+                    num_attention_heads * gnn1_last_embd_sz, actions_mlp_sizes[0]
+                )
+            else:
+                raise ValueError(f"Unsupported module_residual: {res}.")
+
     def reset_parameters(self):
         self.cnn.reset_parameters()
         self.gnn_pre_processor.reset_parameters()
@@ -1048,6 +1082,10 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 for lin in mlp:
                     lin.reset_parameters()
 
+        for res in [self.cnn_to_out_lin, self.cnn_to_gnn2_lin, self.gnn1_to_out_lin]:
+            if res is not None:
+                res.reset_parameters()
+
     def in_simulation(self, value):
         if value and (self.test_wrt_intmd is not None):
             self.return_intmd_res = True
@@ -1061,8 +1099,8 @@ class AgentWithTwoNetworks(torch.nn.Module):
         return next(self.parameters()).device
 
     def forward(self, x, data):
-        x = self.cnn(x)
-        x = self.gnn_pre_processor(x, data)
+        cnn_out = self.cnn(x)
+        x = self.gnn_pre_processor(cnn_out, data)
 
         gnn1_out = x
         for conv in self.gnns1:
@@ -1073,6 +1111,11 @@ class AgentWithTwoNetworks(torch.nn.Module):
             gnn2_out = x
         else:
             gnn2_out = gnn1_out
+
+        if self.cnn_to_gnn2_lin is not None:
+            res_out = self.cnn_to_gnn2_lin(cnn_out)
+            res_out = F.relu(res_out)
+            gnn2_out = res_out + gnn2_out
         if self.pass_cnn_output_to_gnn2:
             gnn2_out = torch.concatenate([gnn2_out, x], dim=-1)
 
@@ -1086,6 +1129,15 @@ class AgentWithTwoNetworks(torch.nn.Module):
         x = lin(gnn2_out)
         if self.parallel_or_series == "parallel":
             x = lin(gnn1_out) + x
+
+        if self.gnn1_to_out_lin is not None:
+            res_out = self.gnn1_to_out_lin(gnn1_out)
+            res_out = F.relu(res_out)
+            x = res_out + x
+        if self.cnn_to_out_lin is not None:
+            res_out = self.cnn_to_out_lin(cnn_out)
+            res_out = F.relu(res_out)
+            x = res_out + x
 
         for lin in self.actionsMLP[1:]:
             x = F.relu(x)
@@ -1168,6 +1220,13 @@ def run_model_on_grid(
                 break
     model.in_simulation(False)
     return all(terminated), env, observations
+
+
+def _decode_residual_args(args):
+    if args.module_residual is None:
+        return []
+
+    return args.module_residual.split("+")
 
 
 _GNN_DEF_KEYS = [
@@ -1370,6 +1429,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         use_relevances=args.use_relevances,
         pre_gnn_embedding_size=args.pre_gnn_embedding_size,
         pre_gnn_num_mlp_layers=args.pre_gnn_num_mlp_layers,
+        module_residual=_decode_residual_args(args),
     )
     dict_args = vars(args)
     if args.agent_network_type == "single":

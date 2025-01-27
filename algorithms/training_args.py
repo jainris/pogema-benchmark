@@ -113,12 +113,16 @@ def add_training_args(parser):
 
     parser.add_argument("--intmd_training", type=str, default=None)
     parser.add_argument(
-        "--pass_cnn_output_to_gnn2", action=argparse.BooleanOptionalAction, default=False
+        "--pass_cnn_output_to_gnn2",
+        action=argparse.BooleanOptionalAction,
+        default=False,
     )
     parser.add_argument("--pairwise_loss", type=str, default="logistic")
     parser.add_argument("--collision_shielding_args", type=str, default="")
     parser.add_argument("--collision_shielding_model_epoch_num", type=str, default=None)
 
     parser.add_argument("--test_wrt_intmd", type=int, default=None)
+
+    parser.add_argument("--module_residual", type=str, default=None)
 
     return parser
