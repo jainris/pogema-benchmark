@@ -17,6 +17,11 @@ from run_expert import (
 
 def add_imitation_dataset_args(parser):
     parser.add_argument("--comm_radius", type=int, default=7)
+    parser.add_argument(
+        "--eager_imitation_dataset_gen",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     return parser
 
 
@@ -65,6 +70,7 @@ def generate_graph_dataset(
     save_termination_state,
     use_edge_attr=False,
     print_prefix="",
+    id_offset=0,
 ):
     dataset_node_features = []
     dataset_Adj = []
@@ -135,7 +141,7 @@ def generate_graph_dataset(
 
             dataset_node_features.append(node_features)
             dataset_Adj.append(Adj)
-            graph_map_id.append(id)
+            graph_map_id.append(id + id_offset)
         dataset_target_actions.extend(actions)
         dataset_terminated.extend(terminated)
 
@@ -157,6 +163,39 @@ def generate_graph_dataset(
         result = (*result, dataset_agent_pos)
 
     return tuple(torch.from_numpy(res) for res in result)
+
+
+def eager_generate_graph_dataset(
+    dataset,
+    comm_radius,
+    obs_radius,
+    num_samples,
+    save_termination_state,
+    dir_path,
+    use_edge_attr=False,
+    print_prefix="",
+):
+    for id, data in enumerate(dataset):
+        if print_prefix is not None:
+            print(
+                f"{print_prefix}"
+                f"Generating Graph Dataset for map {id + 1}/{num_samples}"
+            )
+
+        results = generate_graph_dataset(
+            dataset=[data],
+            comm_radius=comm_radius,
+            obs_radius=obs_radius,
+            num_samples=num_samples,
+            save_termination_state=save_termination_state,
+            use_edge_attr=use_edge_attr,
+            print_prefix=None,
+            id_offset=id,
+        )
+
+        path = dir_path / f"map_{id}.pkl"
+        with open(path, "wb") as f:
+            pickle.dump(results, f)
 
 
 def main():
@@ -191,21 +230,36 @@ def main():
     if isinstance(dataset, tuple):
         dataset, seed_mask = dataset
 
-    graph_dataset = generate_graph_dataset(
-        dataset,
-        args.comm_radius,
-        args.obs_radius,
-        args.num_samples,
-        args.save_termination_state,
-        args.use_edge_attr,
-    )
+    if not args.eager_imitation_dataset_gen:
+        graph_dataset = generate_graph_dataset(
+            dataset,
+            args.comm_radius,
+            args.obs_radius,
+            args.num_samples,
+            args.save_termination_state,
+            args.use_edge_attr,
+        )
 
-    file_name = get_imitation_dataset_file_name(args)
-    path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
+        file_name = get_imitation_dataset_file_name(args)
+        path = pathlib.Path(f"{args.dataset_dir}", "processed_dataset", f"{file_name}")
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        pickle.dump((graph_dataset), f)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump((graph_dataset), f)
+    else:
+        file_name = get_imitation_dataset_file_name(args)[:-4]
+        path = pathlib.Path(args.dataset_dir, "processed_dataset_eager", file_name)
+        path.mkdir(parents=True, exist_ok=True)
+
+        eager_generate_graph_dataset(
+            dataset,
+            comm_radius=args.comm_radius,
+            obs_radius=args.obs_radius,
+            num_samples=args.num_samples,
+            save_termination_state=args.save_termination_state,
+            dir_path=path,
+            use_edge_attr=args.use_edge_attr,
+        )
 
 
 if __name__ == "__main__":
