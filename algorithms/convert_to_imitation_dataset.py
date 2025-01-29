@@ -17,11 +17,7 @@ from run_expert import (
 
 def add_imitation_dataset_args(parser):
     parser.add_argument("--comm_radius", type=int, default=7)
-    parser.add_argument(
-        "--eager_imitation_dataset_gen",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-    )
+    parser.add_argument("--batched_saving", type=int, default=None)
     return parser
 
 
@@ -165,16 +161,19 @@ def generate_graph_dataset(
     return tuple(torch.from_numpy(res) for res in result)
 
 
-def eager_generate_graph_dataset(
+def batched_generate_graph_dataset(
     dataset,
     comm_radius,
     obs_radius,
     num_samples,
     save_termination_state,
     dir_path,
+    batch_size,
     use_edge_attr=False,
     print_prefix="",
 ):
+    batch_id = 0
+    batched_results = None
     for id, data in enumerate(dataset):
         if print_prefix is not None:
             print(
@@ -192,10 +191,26 @@ def eager_generate_graph_dataset(
             print_prefix=None,
             id_offset=id,
         )
+        if batched_results is None:
+            batched_results = results
+        else:
+            batched_results = tuple(
+                torch.cat((br, r), dim=0) for (br, r) in zip(batched_results, results)
+            )
 
-        path = dir_path / f"map_{id}.pkl"
+        while batched_results[0].shape[0] >= batch_size:
+            results = batched_results[:batch_size]
+            batched_results = batched_results[batch_size:]
+
+            path = dir_path / f"batch_{batch_id}.pkl"
+            with open(path, "wb") as f:
+                pickle.dump(results, f)
+
+            batch_id += 1
+    if batched_results[0].shape[0] > 0:
+        path = dir_path / f"batch_{batch_id}.pkl"
         with open(path, "wb") as f:
-            pickle.dump(results, f)
+            pickle.dump(batched_results, f)
 
 
 def main():
@@ -230,7 +245,7 @@ def main():
     if isinstance(dataset, tuple):
         dataset, seed_mask = dataset
 
-    if not args.eager_imitation_dataset_gen:
+    if args.batched_saving is None:
         graph_dataset = generate_graph_dataset(
             dataset,
             args.comm_radius,
@@ -251,13 +266,14 @@ def main():
         path = pathlib.Path(args.dataset_dir, "processed_dataset_eager", file_name)
         path.mkdir(parents=True, exist_ok=True)
 
-        eager_generate_graph_dataset(
+        batched_generate_graph_dataset(
             dataset,
             comm_radius=args.comm_radius,
             obs_radius=args.obs_radius,
             num_samples=args.num_samples,
             save_termination_state=args.save_termination_state,
             dir_path=path,
+            batch_size=args.batched_saving,
             use_edge_attr=args.use_edge_attr,
         )
 
