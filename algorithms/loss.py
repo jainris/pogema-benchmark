@@ -93,7 +93,7 @@ class FirstTwoStepLoss(torch.nn.Module):
 
     def forward(self, x, y):
         x = torch.nn.functional.softmax(x, dim=-1)
-        x = x.reshape((x.shape[0], self.step1_classes, -1))
+        x = x.reshape((x.shape[0], self.num_classes, -1))
         x = torch.sum(x, dim=-1, keepdim=False)
         x = torch.log(x)
         return self.loss(x, y)
