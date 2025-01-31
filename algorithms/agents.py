@@ -1456,6 +1456,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         module_residual=_decode_residual_args(args),
         train_two_steps=args.train_two_steps,
     )
+    common_dataset_kwargs = {"train_two_step": args.train_two_steps}
     dict_args = vars(args)
     if args.agent_network_type == "single":
         model_kwargs, hmodel = _decode_args(dict_args)
@@ -1525,4 +1526,4 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
     if args.load_partial_parameters_path is not None:
         # Loading parameters
         model = load_and_freeze_parameters(model, args, device)
-    return model, hypergraph_model, dataset_kwargs
+    return model, hypergraph_model, dataset_kwargs | common_dataset_kwargs
