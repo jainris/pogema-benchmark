@@ -83,19 +83,16 @@ class FirstTwoStepLoss(torch.nn.Module):
     def __init__(self, num_classes=5):
         super().__init__()
         self.num_classes = num_classes
-        self.loss = torch.nn.NLLLoss()
+        self.loss = torch.nn.CrossEntropyLoss()
 
     def get_accuracy(self, x, y):
-        x = torch.nn.functional.softmax(x, dim=-1)
         x = x.reshape((x.shape[0], self.num_classes, -1))
-        x = torch.sum(x, dim=-1, keepdim=False)
+        x = torch.logsumexp(x, dim=-1, keepdim=False)
         return default_acc(x, y)
 
     def forward(self, x, y):
-        x = torch.nn.functional.softmax(x, dim=-1)
         x = x.reshape((x.shape[0], self.num_classes, -1))
-        x = torch.sum(x, dim=-1, keepdim=False)
-        x = torch.log(x)
+        x = torch.logsumexp(x, dim=-1, keepdim=False)
         return self.loss(x, y)
 
 

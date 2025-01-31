@@ -836,10 +836,8 @@ class DecentralPlannerGATNet(torch.nn.Module):
 
         if self.train_two_steps and self.simulation:
             # In simulation, we only want to return the first action
-            x = torch.nn.functional.softmax(x, dim=-1)
             x = x.reshape((x.shape[0], self.step1_classes, -1))
-            x = torch.sum(x, dim=-1, keepdim=False)
-            x = torch.log(x)
+            x = torch.logsumexp(x, dim=-1, keepdim=False)
         return x
 
 
