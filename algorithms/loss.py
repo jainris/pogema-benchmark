@@ -77,6 +77,28 @@ class CombinedLosses(torch.nn.Module):
         return loss
 
 
+class FirstTwoStepLoss(torch.nn.Module):
+    r"""Calculates the loss for first action in a two step predictions."""
+
+    def __init__(self, num_classes=5):
+        super().__init__()
+        self.num_classes = num_classes
+        self.loss = torch.nn.NLLLoss()
+
+    def get_accuracy(self, x, y):
+        x = torch.nn.functional.softmax(x, dim=-1)
+        x = x.reshape((x.shape[0], self.step1_classes, -1))
+        x = torch.sum(x, dim=-1, keepdim=False)
+        return default_acc(x, y)
+
+    def forward(self, x, y):
+        x = torch.nn.functional.softmax(x, dim=-1)
+        x = x.reshape((x.shape[0], self.step1_classes, -1))
+        x = torch.sum(x, dim=-1, keepdim=False)
+        x = torch.log(x)
+        return self.loss(x, y)
+
+
 def default_acc(y_pred, y_true):
     return torch.sum(torch.argmax(y_pred, dim=-1) == y_true).detach().cpu()
 
@@ -86,7 +108,11 @@ def ranking_acc(y_pred, y_true):
 
 
 def get_loss_function(args) -> torch.nn.Module:
-    if args.train_only_for_relevance:
+    if args.train_for_two_steps:
+        assert not args.train_only_for_relevance
+        loss_function = FirstTwoStepLoss()
+        acc_function = loss_function.get_accuracy
+    elif args.train_only_for_relevance:
         assert (
             args.pibt_expert_relevance_training
         ), "Need the relevance data to train for relevance."
@@ -98,6 +124,22 @@ def get_loss_function(args) -> torch.nn.Module:
 
     intmd_training, vals = decode_intmd_training_args(args)
     if not intmd_training:
+        if args.train_for_two_steps:
+            loss_function1 = LossWrapper(
+                loss_function,
+                accuracy_func=acc_function,
+                train_on_terminated_agents=args.train_on_terminated_agents,
+            )
+            loss_function2 = LossWrapper(
+                torch.nn.CrossEntropyLoss(),
+                accuracy_func=default_acc,
+                field_to_use="y_two_step",
+                train_on_terminated_agents=args.train_on_terminated_agents,
+            )
+            return CombinedLosses(
+                [loss_function1, loss_function2],
+                weights=[1.0, args.train_for_two_steps_weight],
+            )
         return LossWrapper(
             loss_function,
             accuracy_func=acc_function,
@@ -128,5 +170,16 @@ def get_loss_function(args) -> torch.nn.Module:
                 weights.append(weight)
             else:
                 raise ValueError(f"Unsupported intmd training: {v}.")
+
+        if args.train_for_two_steps:
+            loss_function = LossWrapper(
+                torch.nn.CrossEntropyLoss(),
+                accuracy_func=default_acc,
+                index_to_use=0,
+                field_to_use="y_two_step",
+                train_on_terminated_agents=args.train_on_terminated_agents,
+            )
+            loss_functions.append(loss_function)
+            weights.append(args.train_for_two_steps_weight)
 
         return CombinedLosses(loss_functions, weights)
