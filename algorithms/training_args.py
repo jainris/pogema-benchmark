@@ -125,8 +125,8 @@ def add_training_args(parser):
 
     parser.add_argument("--module_residual", type=str, default=None)
     parser.add_argument(
-        "--train_for_two_steps", action=argparse.BooleanOptionalAction, default=False
+        "--train_two_steps", action=argparse.BooleanOptionalAction, default=False
     )
-    parser.add_argument("--train_for_two_steps_weight", type=float, default=1.0)
+    parser.add_argument("--train_two_steps_weight", type=float, default=1.0)
 
     return parser

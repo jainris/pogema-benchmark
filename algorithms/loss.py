@@ -108,7 +108,7 @@ def ranking_acc(y_pred, y_true):
 
 
 def get_loss_function(args) -> torch.nn.Module:
-    if args.train_for_two_steps:
+    if args.train_two_steps:
         assert not args.train_only_for_relevance
         loss_function = FirstTwoStepLoss()
         acc_function = loss_function.get_accuracy
@@ -124,7 +124,7 @@ def get_loss_function(args) -> torch.nn.Module:
 
     intmd_training, vals = decode_intmd_training_args(args)
     if not intmd_training:
-        if args.train_for_two_steps:
+        if args.train_two_steps:
             loss_function1 = LossWrapper(
                 loss_function,
                 accuracy_func=acc_function,
@@ -138,7 +138,7 @@ def get_loss_function(args) -> torch.nn.Module:
             )
             return CombinedLosses(
                 [loss_function1, loss_function2],
-                weights=[1.0, args.train_for_two_steps_weight],
+                weights=[1.0, args.train_two_steps_weight],
             )
         return LossWrapper(
             loss_function,
@@ -171,7 +171,7 @@ def get_loss_function(args) -> torch.nn.Module:
             else:
                 raise ValueError(f"Unsupported intmd training: {v}.")
 
-        if args.train_for_two_steps:
+        if args.train_two_steps:
             loss_function = LossWrapper(
                 torch.nn.CrossEntropyLoss(),
                 accuracy_func=default_acc,
@@ -180,6 +180,6 @@ def get_loss_function(args) -> torch.nn.Module:
                 train_on_terminated_agents=args.train_on_terminated_agents,
             )
             loss_functions.append(loss_function)
-            weights.append(args.train_for_two_steps_weight)
+            weights.append(args.train_two_steps_weight)
 
         return CombinedLosses(loss_functions, weights)
