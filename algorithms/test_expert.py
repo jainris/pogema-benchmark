@@ -90,6 +90,9 @@ def main():
     parser.add_argument("--test_name", type=str, default="in_distribution")
     parser.add_argument("--skip_n", type=int, default=None)
     parser.add_argument("--subsample_n", type=int, default=None)
+    parser.add_argument(
+        "--save_expert_stats", action=argparse.BooleanOptionalAction, default=False
+    )
 
     args = parser.parse_args()
     print(args)
@@ -115,9 +118,9 @@ def main():
     grid_configs = []
 
     if args.skip_n is not None:
-        seeds = seeds[args.skip_n:]
+        seeds = seeds[args.skip_n :]
     if args.subsample_n is not None:
-        seeds = seeds[:args.subsample_n]
+        seeds = seeds[: args.subsample_n]
 
     for seed in seeds:
         grid_configs.append(_grid_config_generator(seed))
@@ -165,12 +168,13 @@ def main():
             }
         )
 
-    file_name = get_expert_file_name(vars(args))
-    path = pathlib.Path(f"{args.dataset_dir}", "test_expert_metrics", f"{file_name}")
+    if args.save_expert_stats:
+        file_name = get_expert_file_name(vars(args))
+        path = pathlib.Path(args.dataset_dir, "test_expert_metrics", file_name)
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        pickle.dump((all_success, all_makespan, all_total_flowtime), f)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump((all_success, all_makespan, all_total_flowtime), f)
 
 
 if __name__ == "__main__":
