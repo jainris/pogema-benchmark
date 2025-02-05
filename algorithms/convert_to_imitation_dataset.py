@@ -54,7 +54,10 @@ def get_imitation_dataset_file_name(args):
         file_name += "_pibt_relevance"
     if (not load_positions_separately) and use_edge_attr:
         file_name += "_pos"
-    file_name = file_name[1:] + ".pkl"
+    if len(file_name) > 0:
+        file_name = file_name[1:] + ".pkl"
+    else:
+        file_name = "default.pkl"
     return file_name
 
 
