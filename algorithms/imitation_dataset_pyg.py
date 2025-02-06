@@ -46,7 +46,7 @@ class MAPFGraphDataset(Dataset):
         relevances=None,
         use_relevances=None,
         edge_attr_opts="straight",
-        train_two_step=False,
+        train_n_steps=None,
     ) -> None:
         (
             self.dataset_node_features,
@@ -67,10 +67,10 @@ class MAPFGraphDataset(Dataset):
             use_relevances[: len("only-relevance")] == "only-relevance"
         ):
             self.use_relevances = use_relevances[len("only-relevance-") :]
-        self.train_two_step = train_two_step
+        self.train_n_steps = train_n_steps
         assert (use_relevances is None) or (
-            not train_two_step
-        ), "Can't use relevances and train for two steps."
+            not train_n_steps
+        ), "Can't use relevances and train for n steps."
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -119,15 +119,16 @@ class MAPFGraphDataset(Dataset):
                     f"Unsupported value for use_relevances: {self.use_relevances}."
                 )
             extra_kwargs = extra_kwargs | {"relevances": relevances}
-        if self.train_two_step:
-            if (index + 1 < len(self)) and (
-                self.graph_map_id[index + 1] == self.graph_map_id[index]
-            ):
-                y_two_step = self.dataset_target_actions[index + 1]
-            else:
-                y_two_step = 0
-            y_two_step = 5 * y + y_two_step
-            extra_kwargs = extra_kwargs | {"y_two_step": y_two_step}
+        if self.train_n_steps:
+            cur_y = y
+            for num_steps in range(1, self.train_n_steps):
+                next_y = 0
+                if (index + num_steps < len(self)) and (
+                    self.graph_map_id[index + num_steps] == self.graph_map_id[index]
+                ):
+                    next_y = self.dataset_target_actions[index + num_steps]
+                cur_y = 5 * cur_y + next_y
+                extra_kwargs = extra_kwargs | {f"y_{num_steps + 1}_step": cur_y}
         return Data(
             x=self.dataset_node_features[index],
             edge_index=edge_index,
@@ -153,7 +154,7 @@ class MAPFHypergraphDataset(Dataset):
         relevances=None,
         use_relevances=None,
         edge_attr_opts="straight",
-        train_two_step=False,
+        train_n_steps=None,
     ) -> None:
         (
             self.dataset_node_features,
@@ -177,10 +178,10 @@ class MAPFHypergraphDataset(Dataset):
             use_relevances[: len("only-relevance")] == "only-relevance"
         ):
             self.use_relevances = use_relevances[len("only-relevance-") :]
-        self.train_two_step = train_two_step
+        self.train_n_steps = train_n_steps
         assert (use_relevances is None) or (
-            not train_two_step
-        ), "Can't use relevances and train for two steps."
+            not train_n_steps
+        ), "Can't use relevances and train for n steps."
 
     def __len__(self) -> int:
         return self.dataset_node_features.shape[0]
@@ -256,16 +257,16 @@ class MAPFHypergraphDataset(Dataset):
                     f"Unsupported value for use_relevances: {self.use_relevances}."
                 )
             extra_kwargs = extra_kwargs | {"relevances": relevances}
-        if self.train_two_step:
-            if (index + 1 < len(self)) and (
-                self.graph_map_id[index + 1] == self.graph_map_id[index]
-            ):
-                y_two_step = self.dataset_target_actions[index + 1]
-            else:
-                # This is the last action for the map, hence next action is to wait.
-                y_two_step = 0
-            y_two_step = 5* y + y_two_step
-            extra_kwargs = extra_kwargs | {"y_two_step": y_two_step}
+        if self.train_n_steps:
+            cur_y = y
+            for num_steps in range(1, self.train_n_steps):
+                next_y = 0
+                if (index + num_steps < len(self)) and (
+                    self.graph_map_id[index + num_steps] == self.graph_map_id[index]
+                ):
+                    next_y = self.dataset_target_actions[index + num_steps]
+                cur_y = 5 * cur_y + next_y
+                extra_kwargs = extra_kwargs | {f"y_{num_steps + 1}_step": cur_y}
         return Data(
             x=self.dataset_node_features[index],
             edge_index=torch.LongTensor(self.hyperedge_indices[index]),

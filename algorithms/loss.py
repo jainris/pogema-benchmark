@@ -77,21 +77,23 @@ class CombinedLosses(torch.nn.Module):
         return loss
 
 
-class FirstTwoStepLoss(torch.nn.Module):
+class FirstNStepLoss(torch.nn.Module):
     r"""Calculates the loss for first action in a two step predictions."""
 
-    def __init__(self, num_classes=5):
+    def __init__(self, num_classes=5, n_steps=1):
         super().__init__()
         self.num_classes = num_classes
+        self.n_steps = n_steps
+        self.output_dim = num_classes**n_steps
         self.loss = torch.nn.CrossEntropyLoss()
 
     def get_accuracy(self, x, y):
-        x = x.reshape((x.shape[0], self.num_classes, -1))
+        x = x.reshape((x.shape[0], self.output_dim, -1))
         x = torch.logsumexp(x, dim=-1, keepdim=False)
         return default_acc(x, y)
 
     def forward(self, x, y):
-        x = x.reshape((x.shape[0], self.num_classes, -1))
+        x = x.reshape((x.shape[0], self.output_dim, -1))
         x = torch.logsumexp(x, dim=-1, keepdim=False)
         return self.loss(x, y)
 
@@ -104,10 +106,20 @@ def ranking_acc(y_pred, y_true):
     return torch.sum(calculate_accuracy_for_ranking(y_pred, y_true)).detach().cpu()
 
 
+def get_n_step_weights(train_n_steps, train_n_steps_weight) -> Sequence[float]:
+    train_n_steps_weight = [float(f) for f in train_n_steps_weight.split("+")]
+    if len(train_n_steps_weight) == 1:
+        train_n_steps_weight = train_n_steps_weight * (train_n_steps - 1)
+    assert len(train_n_steps_weight) == (
+        train_n_steps - 1
+    ), f"Expecting 1 or {train_n_steps - 1} train_n_steps weights, but got {len(train_n_steps_weight)}."
+    return train_n_steps_weight
+
+
 def get_loss_function(args) -> torch.nn.Module:
-    if args.train_two_steps:
+    if args.train_n_steps:
         assert not args.train_only_for_relevance
-        loss_function = FirstTwoStepLoss()
+        loss_function = FirstNStepLoss(n_steps=1)
         acc_function = loss_function.get_accuracy
     elif args.train_only_for_relevance:
         assert (
@@ -121,21 +133,36 @@ def get_loss_function(args) -> torch.nn.Module:
 
     intmd_training, vals = decode_intmd_training_args(args)
     if not intmd_training:
-        if args.train_two_steps:
-            loss_function1 = LossWrapper(
-                loss_function,
-                accuracy_func=acc_function,
-                train_on_terminated_agents=args.train_on_terminated_agents,
-            )
-            loss_function2 = LossWrapper(
-                torch.nn.CrossEntropyLoss(),
-                accuracy_func=default_acc,
-                field_to_use="y_two_step",
-                train_on_terminated_agents=args.train_on_terminated_agents,
+        if args.train_n_steps:
+            loss_functions = [
+                LossWrapper(
+                    loss_function,
+                    accuracy_func=acc_function,
+                    train_on_terminated_agents=args.train_on_terminated_agents,
+                )
+            ]
+            for num_steps in range(2, args.train_n_steps):
+                lf = FirstNStepLoss(n_steps=num_steps)
+                loss_functions.append(
+                    LossWrapper(
+                        lf,
+                        accuracy_func=lf.get_accuracy,
+                        field_to_use=f"y_{num_steps}_step",
+                        train_on_terminated_agents=args.train_on_terminated_agents,
+                    )
+                )
+            loss_functions.append(
+                LossWrapper(
+                    torch.nn.CrossEntropyLoss(),
+                    accuracy_func=default_acc,
+                    field_to_use=f"y_{args.train_n_steps}_step",
+                    train_on_terminated_agents=args.train_on_terminated_agents,
+                )
             )
             return CombinedLosses(
-                [loss_function1, loss_function2],
-                weights=[1.0, args.train_two_steps_weight],
+                loss_functions,
+                weights=[1.0]
+                + get_n_step_weights(args.train_n_steps, args.train_n_steps_weight),
             )
         return LossWrapper(
             loss_function,
@@ -168,15 +195,29 @@ def get_loss_function(args) -> torch.nn.Module:
             else:
                 raise ValueError(f"Unsupported intmd training: {v}.")
 
-        if args.train_two_steps:
-            loss_function = LossWrapper(
-                torch.nn.CrossEntropyLoss(),
-                accuracy_func=default_acc,
-                index_to_use=0,
-                field_to_use="y_two_step",
-                train_on_terminated_agents=args.train_on_terminated_agents,
+        if args.train_n_steps:
+            for num_steps in range(2, args.train_n_steps):
+                lf = FirstNStepLoss(n_steps=num_steps)
+                loss_functions.append(
+                    LossWrapper(
+                        lf,
+                        accuracy_func=lf.get_accuracy,
+                        index_to_use=0,
+                        field_to_use=f"y_{num_steps}_step",
+                        train_on_terminated_agents=args.train_on_terminated_agents,
+                    )
+                )
+            loss_functions.append(
+                LossWrapper(
+                    torch.nn.CrossEntropyLoss(),
+                    accuracy_func=default_acc,
+                    index_to_use=0,
+                    field_to_use=f"y_{args.train_n_steps}_step",
+                    train_on_terminated_agents=args.train_on_terminated_agents,
+                )
             )
-            loss_functions.append(loss_function)
-            weights.append(args.train_two_steps_weight)
+            weights = weights + get_n_step_weights(
+                args.train_n_steps, args.train_n_steps_weight
+            )
 
         return CombinedLosses(loss_functions, weights)

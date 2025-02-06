@@ -657,7 +657,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         pre_gnn_embedding_size=None,
         pre_gnn_num_mlp_layers=None,
         module_residual=[],
-        train_two_steps=False,
+        train_n_steps=None,
     ):
         super().__init__()
 
@@ -672,10 +672,10 @@ class DecentralPlannerGATNet(torch.nn.Module):
             else:
                 num_gnn_layers = len(embedding_sizes_gnn)
 
-        self.train_two_steps = train_two_steps
-        if train_two_steps:
+        self.train_n_steps = train_n_steps
+        if train_n_steps:
             self.step1_classes = num_classes
-            num_classes = num_classes * num_classes
+            num_classes = num_classes**train_n_steps
 
         inW = FOV + 2
         inH = FOV + 2
@@ -834,7 +834,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
                 x = F.dropout(x, p=0.2, training=self.training)
         x = self.actionsMLP[-1](x)
 
-        if self.train_two_steps and self.simulation:
+        if self.train_n_steps and self.simulation:
             # In simulation, we only want to return the first action
             x = x.reshape((x.shape[0], self.step1_classes, -1))
             x = torch.logsumexp(x, dim=-1, keepdim=False)
@@ -865,7 +865,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         pass_cnn_output_to_gnn2=False,
         test_wrt_intmd=None,
         module_residual=[],
-        train_two_steps=False,
+        train_n_steps=None,
     ):
         super().__init__()
 
@@ -874,10 +874,10 @@ class AgentWithTwoNetworks(torch.nn.Module):
         inW = FOV + 2
         inH = FOV + 2
 
-        self.train_two_steps = train_two_steps
-        if train_two_steps:
+        self.train_n_steps = train_n_steps
+        if train_n_steps:
             self.step1_classes = num_classes
-            num_classes = num_classes * num_classes
+            num_classes = num_classes**train_n_steps
 
         if cnn_output_size is None:
             cnn_output_size = numInputFeatures
@@ -1175,12 +1175,10 @@ class AgentWithTwoNetworks(torch.nn.Module):
                 return outputs[self.test_wrt_intmd + 1]
             return tuple(outputs)
 
-        if self.train_two_steps and self.simulation:
+        if self.train_n_steps and self.simulation:
             # In simulation, we only want to return the first action
-            x = torch.nn.functional.softmax(x, dim=-1)
             x = x.reshape((x.shape[0], self.step1_classes, -1))
-            x = torch.sum(x, dim=-1, keepdim=False)
-            x = torch.log(x)
+            x = torch.logsumexp(x, dim=-1, keepdim=False)
 
         return x
 
@@ -1452,9 +1450,9 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         pre_gnn_embedding_size=args.pre_gnn_embedding_size,
         pre_gnn_num_mlp_layers=args.pre_gnn_num_mlp_layers,
         module_residual=_decode_residual_args(args),
-        train_two_steps=args.train_two_steps,
+        train_n_steps=args.train_n_steps,
     )
-    common_dataset_kwargs = {"train_two_step": args.train_two_steps}
+    common_dataset_kwargs = {"train_n_steps": args.train_n_steps}
     dict_args = vars(args)
     if args.agent_network_type == "single":
         model_kwargs, hmodel = _decode_args(dict_args)
