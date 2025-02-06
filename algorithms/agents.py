@@ -658,6 +658,7 @@ class DecentralPlannerGATNet(torch.nn.Module):
         pre_gnn_num_mlp_layers=None,
         module_residual=[],
         train_n_steps=None,
+        fair_compare_n_steps=None,
     ):
         super().__init__()
 
@@ -773,12 +774,32 @@ class DecentralPlannerGATNet(torch.nn.Module):
         #                                                                   #
         #####################################################################
 
-        actionsfc = []
         actions_mlp_sizes = [
             num_attention_heads * embedding_sizes_gnn[-1],
             embedding_sizes_gnn[-1],
             num_classes,
         ]
+        if fair_compare_n_steps is not None:
+            assert (
+                train_n_steps is None
+            ), "Can't have both, fair compare and training for n steps."
+            assert len(actions_mlp_sizes) == 3
+            fair_compare_n_steps = fair_compare_n_steps.split(":")
+            n_steps = int(fair_compare_n_steps[0])
+            method = "change_intmd_size"
+            if len(fair_compare_n_steps) > 1:
+                method = fair_compare_n_steps[1]
+            if method == "change_intmd_size":
+                target_param_size = actions_mlp_sizes[0] * actions_mlp_sizes[
+                    1
+                ] + actions_mlp_sizes[1] * (num_classes**n_steps)
+                new_size = target_param_size / (actions_mlp_sizes[0] + num_classes)
+                new_size = math.ceil(new_size)
+                actions_mlp_sizes[1] = new_size
+            else:
+                raise ValueError(f"Unsupported fair_compare_n_steps method: {method}.")
+
+        actionsfc = []
         for i in range(len(actions_mlp_sizes) - 1):
             actionsfc.append(
                 torch.nn.Linear(
@@ -866,6 +887,7 @@ class AgentWithTwoNetworks(torch.nn.Module):
         test_wrt_intmd=None,
         module_residual=[],
         train_n_steps=None,
+        fair_compare_n_steps=None,
     ):
         super().__init__()
 
@@ -1051,12 +1073,32 @@ class AgentWithTwoNetworks(torch.nn.Module):
         #                                                                   #
         #####################################################################
 
-        actionsfc = []
         actions_mlp_sizes = [
             num_attention_heads * gnn2_last_embd_sz,
             gnn2_last_embd_sz,
             num_classes,
         ]
+        if fair_compare_n_steps is not None:
+            assert (
+                train_n_steps is None
+            ), "Can't have both, fair compare and training for n steps."
+            assert len(actions_mlp_sizes) == 3
+            fair_compare_n_steps = fair_compare_n_steps.split(":")
+            n_steps = int(fair_compare_n_steps[0])
+            method = "change_intmd_size"
+            if len(fair_compare_n_steps) > 1:
+                method = fair_compare_n_steps[1]
+            if method == "change_intmd_size":
+                target_param_size = actions_mlp_sizes[0] * actions_mlp_sizes[
+                    1
+                ] + actions_mlp_sizes[1] * (num_classes**n_steps)
+                new_size = target_param_size / (actions_mlp_sizes[0] + num_classes)
+                new_size = math.ceil(new_size)
+                actions_mlp_sizes[1] = new_size
+            else:
+                raise ValueError(f"Unsupported fair_compare_n_steps method: {method}.")
+
+        actionsfc = []
         for i in range(len(actions_mlp_sizes) - 1):
             actionsfc.append(
                 torch.nn.Linear(
@@ -1451,6 +1493,7 @@ def get_model(args, device) -> tuple[torch.nn.Module, bool, dict]:
         pre_gnn_num_mlp_layers=args.pre_gnn_num_mlp_layers,
         module_residual=_decode_residual_args(args),
         train_n_steps=args.train_n_steps,
+        fair_compare_n_steps=args.fair_compare_n_steps,
     )
     common_dataset_kwargs = {"train_n_steps": args.train_n_steps}
     dict_args = vars(args)
