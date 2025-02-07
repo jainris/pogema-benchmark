@@ -122,6 +122,17 @@ def get_expert_algorithm_and_config(args):
 
         inference_config = PIBTInferenceConfig()
         expert_algorithm = PIBTDistanceBasedInference
+    elif args.expert_algorithm == "MAPF-GPT":
+        from gpt.inference import MAPFGPTInference, MAPFGPTInferenceConfig
+
+        inference_config = MAPFGPTInferenceConfig()
+        expert_algorithm = MAPFGPTInference
+    elif args.expert_algorithm[:len("MAPF-GPT")] == "MAPF-GPT":
+        from gpt.inference import MAPFGPTInference, MAPFGPTInferenceConfig
+
+        model_weight = args.expert_algorithm[len("MAPF-GPT") + 1:]
+        inference_config = MAPFGPTInferenceConfig(path_to_weights=f"weights/model-{model_weight}.pt")
+        expert_algorithm = MAPFGPTInference
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
     return expert_algorithm, inference_config
