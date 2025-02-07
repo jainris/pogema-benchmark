@@ -198,7 +198,7 @@ class PIBTCollisionShielding:
 
     def __call__(self, actions):
         if self.sampling_method == "probabilistic":
-            actions = torch.nn.functional.softmax(actions, dim=-1)
+            # actions = torch.nn.functional.softmax(actions, dim=-1)
             actions = actions.detach().cpu().numpy()
         actions = self.pibt_instance.step(actions)
         return actions
@@ -455,6 +455,7 @@ class GPT(nn.Module):
         if pibt_collision_shielding:
             assert do_sample
             actions = probs.squeeze()
+            actions = actions[:, :5]
             actions = self.cs_pibt(actions)
             return actions
         else:
