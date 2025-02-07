@@ -26,7 +26,8 @@ class MAPFGPTInferenceConfig(AlgoBase, extra=Extra.forbid):
     mask_goal: bool = False
     mask_cost2go: bool = False
     mask_greed_action: bool = False
-    repo_id: str = 'aandreychuk/MAPF-GPT'
+    repo_id: str = "aandreychuk/MAPF-GPT"
+    pibt_collision_shielding: bool = False
 
 
 def strip_prefix_from_state_dict(state_dict, prefix="_orig_mod."):
@@ -36,7 +37,7 @@ def strip_prefix_from_state_dict(state_dict, prefix="_orig_mod."):
     new_state_dict = {}
     for k, v in state_dict.items():
         if k.startswith(prefix):
-            new_key = k[len(prefix):]
+            new_key = k[len(prefix) :]
             new_state_dict[new_key] = v
         else:
             new_state_dict[k] = v
@@ -65,13 +66,21 @@ class MAPFGPTInference:
         )
 
         path_to_weights = Path(self.cfg.path_to_weights)
-        if path_to_weights.name in ['model-2M.pt', 'model-6M.pt', 'model-85M.pt']:
-            hf_hub_download(repo_id=self.cfg.repo_id, filename=path_to_weights.name, local_dir=path_to_weights.parent)
-            print(f'Using weights loaded from huggingface: {path_to_weights}')
+        if path_to_weights.name in ["model-2M.pt", "model-6M.pt", "model-85M.pt"]:
+            hf_hub_download(
+                repo_id=self.cfg.repo_id,
+                filename=path_to_weights.name,
+                local_dir=path_to_weights.parent,
+            )
+            print(f"Using weights loaded from huggingface: {path_to_weights}")
 
-        if self.cfg.device in ['mps', 'cuda'] and not torch.cuda.is_available() if self.cfg.device == 'cuda' else not torch.backends.mps.is_available():
-            print(f'{self.cfg.device} is not available, using cpu instead!')
-            self.cfg.device = 'cpu'
+        if (
+            self.cfg.device in ["mps", "cuda"] and not torch.cuda.is_available()
+            if self.cfg.device == "cuda"
+            else not torch.backends.mps.is_available()
+        ):
+            print(f"{self.cfg.device} is not available, using cpu instead!")
+            self.cfg.device = "cpu"
 
         checkpoint = torch.load(
             Path(self.cfg.path_to_weights), map_location=self.cfg.device
@@ -128,8 +137,12 @@ class MAPFGPTInference:
                     observations[n]["global_xy"][0] - obs["global_xy"][0],
                     observations[n]["global_xy"][1] - obs["global_xy"][1],
                 )
-                if -self.cfg.agents_radius <= relative_xy[0] <= self.cfg.agents_radius \
-                    and -self.cfg.agents_radius <= relative_xy[1] <= self.cfg.agents_radius:
+                if (
+                    -self.cfg.agents_radius <= relative_xy[0] <= self.cfg.agents_radius
+                    and -self.cfg.agents_radius
+                    <= relative_xy[1]
+                    <= self.cfg.agents_radius
+                ):
                     agents_info.append(
                         {
                             "relative_pos": relative_xy,
@@ -161,14 +174,27 @@ class MAPFGPTInference:
             self.cost2go_data = cost2go.precompute_cost2go(
                 global_obs, self.cfg.cost2go_radius
             )
-            self.actions_history = [["n" for _ in range(self.cfg.num_previous_actions)] for _ in range(num_agents)]
-            self.position_history = [[obs['global_xy']] for obs in observations]
+            self.actions_history = [
+                ["n" for _ in range(self.cfg.num_previous_actions)]
+                for _ in range(num_agents)
+            ]
+            self.position_history = [[obs["global_xy"]] for obs in observations]
         else:
             for i in range(num_agents):
                 self.position_history[i].append(observations[i]["global_xy"])
-                self.actions_history[i].append(moves[(self.position_history[i][-1][0] - self.position_history[i][-2][0], 
-                                                      self.position_history[i][-1][1] - self.position_history[i][-2][1])])
-                self.actions_history[i] = self.actions_history[i][-self.cfg.num_previous_actions:]
+                self.actions_history[i].append(
+                    moves[
+                        (
+                            self.position_history[i][-1][0]
+                            - self.position_history[i][-2][0],
+                            self.position_history[i][-1][1]
+                            - self.position_history[i][-2][1],
+                        )
+                    ]
+                )
+                self.actions_history[i] = self.actions_history[i][
+                    -self.cfg.num_previous_actions :
+                ]
         inputs = self.generate_input(observations)
         tensor_obs = torch.tensor(
             [self.encoder.encode(input) for input in inputs],
@@ -176,7 +202,11 @@ class MAPFGPTInference:
             device=self.cfg.device,
         )
 
-        actions = torch.squeeze(self.net.act(tensor_obs)).tolist()
+        actions = torch.squeeze(
+            self.net.act(
+                tensor_obs, pibt_collision_shielding=self.cfg.pibt_collision_shielding
+            )
+        ).tolist()
         if not isinstance(actions, list):
             actions = [actions]
         return actions
@@ -185,3 +215,6 @@ class MAPFGPTInference:
         self.cost2go_data = None
         self.actions_history = None
         self.position_history = None
+
+        if self.cfg.pibt_collision_shielding:
+            self.net.set_pibt_collision_shielding(env=env)

@@ -125,12 +125,19 @@ def get_expert_algorithm_and_config(args):
     elif args.expert_algorithm[: len("MAPF-GPT")] == "MAPF-GPT":
         from gpt.inference import MAPFGPTInference, MAPFGPTInferenceConfig
 
-        if args.expert_algorithm == "MAPF-GPT":
+        offset = len("MAPF-GPT") + 1
+        pibt_collision_shielding = False
+        if args.expert_algorithm[: len("MAPF-GPT-PIBT")] == "MAPF-GPT-PIBT":
+            pibt_collision_shielding = True
+            offset = len("MAPF-GPT-PIBT") + 1
+
+        if len(args.expert_algorithm) + 1 == offset:
             model_weight = "6M"
         else:
-            model_weight = args.expert_algorithm[len("MAPF-GPT") + 1 :]
+            model_weight = args.expert_algorithm[offset:]
         inference_config = MAPFGPTInferenceConfig(
-            path_to_weights=f"weights/model-{model_weight}.pt"
+            path_to_weights=f"weights/model-{model_weight}.pt",
+            pibt_collision_shielding=pibt_collision_shielding,
         )
         expert_algorithm = MAPFGPTInference
     else:

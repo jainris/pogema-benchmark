@@ -7,6 +7,202 @@ import torch.nn as nn
 from loguru import logger
 from torch.nn import functional as F
 
+from pibt.pypibt.pibt import PIBT
+from utils import get_neighbors
+import numpy as np
+
+
+class PIBTInstance(PIBT):
+    def __init__(self, grid, starts, goals, moves, sampling_method, seed=0):
+        super().__init__(grid, starts, goals, seed)
+
+        # Calculating initial priorities
+        self.priorities: list[float] = []
+        for i in range(self.N):
+            self.priorities.append(
+                self.dist_tables[i].get(self.starts[i]) / self.grid.size
+            )
+
+        self.state = self.starts
+        self.reached_goals = False
+        self.moves = moves
+        self.sampling_method = sampling_method
+
+    def _update_priorities(self):
+        flg_fin = True
+        for i in range(self.N):
+            if self.state[i] != self.goals[i]:
+                flg_fin = False
+                self.priorities[i] += 1
+            else:
+                self.priorities[i] -= np.floor(self.priorities[i])
+        self.reached_goals = flg_fin
+
+    def funcPIBT(self, Q_from, Q_to, i: int, transition_probabilities) -> bool:
+        # true -> valid, false -> invalid
+
+        # get candidate next vertices
+        C, move_idx, mask = get_neighbors(self.grid, Q_from[i], self.moves)
+
+        if self.sampling_method == "deterministic":
+            ids = np.arange(len(C))
+            self.rng.shuffle(ids)  # tie-breaking, randomize
+            ids = sorted(
+                ids,
+                key=lambda u: transition_probabilities[i][move_idx[u]],
+                reverse=True,
+            )
+        elif self.sampling_method == "probabilistic":
+            try:
+                cur_trans_probs = transition_probabilities[i][mask]
+                cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
+
+                ids = np.arange(len(C))
+                ids = self.rng.choice(
+                    ids, size=len(C), replace=False, p=cur_trans_probs, shuffle=False
+                )
+            except:
+                # Potential error due to zeroing of some probs
+                cur_trans_probs = transition_probabilities[i][mask]
+                EPSILON = 1e-6
+
+                cur_trans_probs = cur_trans_probs + EPSILON
+                cur_trans_probs = cur_trans_probs / np.sum(cur_trans_probs)
+
+                ids = np.arange(len(C))
+                ids = self.rng.choice(
+                    ids, size=len(C), replace=False, p=cur_trans_probs, shuffle=False
+                )
+        else:
+            raise ValueError(f"Unsupported sampling method: {self.sampling_method}.")
+
+        # vertex assignment
+        for id in ids:
+            v = C[id]
+            # avoid vertex collision
+            if self.occupied_nxt[v] != self.NIL:
+                continue
+
+            j = self.occupied_now[v]
+
+            # avoid edge collision
+            if j != self.NIL and Q_to[j] == Q_from[i]:
+                continue
+
+            # reserve next location
+            Q_to[i] = v
+            self.actions[i] = move_idx[id]
+            self.occupied_nxt[v] = i
+
+            # priority inheritance (j != i due to the second condition)
+            if (
+                j != self.NIL
+                and (Q_to[j] == self.NIL_COORD)
+                and (not self.funcPIBT(Q_from, Q_to, j, transition_probabilities))
+            ):
+                continue
+
+            return True
+
+        # failed to secure node
+        Q_to[i] = Q_from[i]
+        self.actions[i] = 0
+        self.occupied_nxt[Q_from[i]] = i
+        return False
+
+    def _step(self, Q_from, priorities, transition_probabilities):
+        # setup
+        N = len(Q_from)
+        Q_to = []
+        for i, v in enumerate(Q_from):
+            Q_to.append(self.NIL_COORD)
+            self.occupied_now[v] = i
+
+        # perform PIBT
+        A = sorted(list(range(N)), key=lambda i: priorities[i], reverse=True)
+        for i in A:
+            if Q_to[i] == self.NIL_COORD:
+                self.funcPIBT(Q_from, Q_to, i, transition_probabilities)
+
+        # cleanup
+        for q_from, q_to in zip(Q_from, Q_to):
+            self.occupied_now[q_from] = self.NIL
+            self.occupied_nxt[q_to] = self.NIL
+
+        return Q_to
+
+    def step(self, transition_probabilities):
+        self.actions = np.zeros(self.N, dtype=np.int)
+        if self.reached_goals:
+            return self.actions
+        self.state = self._step(self.state, self.priorities, transition_probabilities)
+        self._update_priorities()
+        return self.actions
+
+    def run(self, max_timestep=1000):
+        raise AssertionError("This method should not be run.")
+
+
+class PIBTInstanceDist(PIBTInstance):
+    def __init__(self, grid, starts, goals, moves, sampling_method, seed=0):
+        super().__init__(grid, starts, goals, moves, sampling_method, seed)
+        self._update_priorities()
+
+    def _update_priorities(self):
+        # Setting priorities based on distance to goal
+        for i in range(self.N):
+            sx, sy = self.state[i]
+            gx, gy = self.goals[i]
+            self.priorities[i] = abs(gx - sx) + abs(gy - sy)
+
+
+class PIBTCollisionShielding:
+    def __init__(
+        self,
+        env,
+        do_sample=True,
+        dist_priorities=False,
+    ):
+        super().__init__()
+        self.env = env
+        sampling_method = "probabilistic"
+        if not do_sample:
+            sampling_method = "deterministic"
+        self.sampling_method = sampling_method
+
+        obstacles = env.grid.get_obstacles(ignore_borders=True)
+        starts = env.grid.get_agents_xy(ignore_borders=True)
+        goals = env.grid.get_targets_xy(ignore_borders=True)
+
+        starts = [tuple(s) for s in starts]
+        goals = [tuple(g) for g in goals]
+
+        if dist_priorities:
+            self.pibt_instance = PIBTInstanceDist(
+                grid=obstacles == 0,
+                starts=starts,
+                goals=goals,
+                moves=env.grid_config.MOVES,
+                seed=env.grid_config.seed,
+                sampling_method=sampling_method,
+            )
+        else:
+            self.pibt_instance = PIBTInstance(
+                grid=obstacles == 0,
+                starts=starts,
+                goals=goals,
+                moves=env.grid_config.MOVES,
+                seed=env.grid_config.seed,
+                sampling_method=sampling_method,
+            )
+
+    def __call__(self, actions):
+        if self.sampling_method == "probabilistic":
+            actions = torch.nn.functional.softmax(actions, dim=-1)
+            actions = actions.detach().cpu().numpy()
+        actions = self.pibt_instance.step(actions)
+        return actions
+
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -240,9 +436,12 @@ class GPT(nn.Module):
         flops_promised = 312e12  # A100 GPU bfloat16 peak flops is 312 TFLOPS
         mfu = flops_achieved / flops_promised
         return mfu
+    
+    def set_pibt_collision_shielding(self, env):
+        self.cs_pibt = PIBTCollisionShielding(env=env, do_sample=True)
 
     @torch.no_grad()
-    def act(self, idx, do_sample=True):
+    def act(self, idx, do_sample=True, pibt_collision_shielding=False):
         logits, _ = self(idx)
         logits = logits[:, -1, :]
 
@@ -253,8 +452,14 @@ class GPT(nn.Module):
 
         probs = F.softmax(masked_logits, dim=-1)
 
-        if do_sample:
-            idx_next = torch.multinomial(probs, num_samples=1)
+        if pibt_collision_shielding:
+            assert do_sample
+            actions = probs.squeeze()
+            actions = self.cs_pibt(actions)
+            return actions
         else:
-            _, idx_next = torch.topk(probs, k=1, dim=-1)
+            if do_sample:
+                idx_next = torch.multinomial(probs, num_samples=1)
+            else:
+                _, idx_next = torch.topk(probs, k=1, dim=-1)
         return idx_next.squeeze()
