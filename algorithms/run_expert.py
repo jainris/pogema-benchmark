@@ -122,16 +122,18 @@ def get_expert_algorithm_and_config(args):
 
         inference_config = PIBTInferenceConfig()
         expert_algorithm = PIBTDistanceBasedInference
-    elif args.expert_algorithm == "MAPF-GPT":
+    elif args.expert_algorithm[: len("MAPF-GPT")] == "MAPF-GPT":
         from gpt.inference import MAPFGPTInference, MAPFGPTInferenceConfig
 
-        inference_config = MAPFGPTInferenceConfig()
-        expert_algorithm = MAPFGPTInference
-    elif args.expert_algorithm[:len("MAPF-GPT")] == "MAPF-GPT":
-        from gpt.inference import MAPFGPTInference, MAPFGPTInferenceConfig
+        num_agents = int(args.robot_density * args.map_h * args.map_w)
 
-        model_weight = args.expert_algorithm[len("MAPF-GPT") + 1:]
-        inference_config = MAPFGPTInferenceConfig(path_to_weights=f"weights/model-{model_weight}.pt")
+        if args.expert_algorithm == "MAPF-GPT":
+            model_weight = "6M"
+        else:
+            model_weight = args.expert_algorithm[len("MAPF-GPT") + 1 :]
+        inference_config = MAPFGPTInferenceConfig(
+            path_to_weights=f"weights/model-{model_weight}.pt", num_agents=num_agents
+        )
         expert_algorithm = MAPFGPTInference
     else:
         raise ValueError(f"Unsupported expert algorithm {args.expert_algorithm}.")
