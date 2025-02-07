@@ -181,7 +181,7 @@ class MAPFGPTInference:
             actions = [actions]
         return actions
 
-    def reset_states(self):
+    def reset_states(self, env):
         self.cost2go_data = None
         self.actions_history = None
         self.position_history = None
