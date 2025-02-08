@@ -457,7 +457,7 @@ class GPT(nn.Module):
             actions = probs.squeeze()
             actions = actions[:, :5]
             actions = self.cs_pibt(actions)
-            return actions
+            return torch.from_numpy(actions)
         else:
             if do_sample:
                 idx_next = torch.multinomial(probs, num_samples=1)
