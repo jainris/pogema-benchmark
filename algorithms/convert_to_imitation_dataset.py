@@ -107,6 +107,10 @@ def generate_graph_dataset(
                 elif neighbour_cutoff_method == "random":
                     vals = (Adj > 0) * np.random.rand(*Adj.shape)
                     idx = np.argsort(-vals, axis=-1)
+                else:
+                    raise ValueError(
+                        f"Unsupported neighbour_cutoff_method: {neighbour_cutoff_method}."
+                    )
                 idx = idx[:, num_neighbour_cutoff:]
                 np.put_along_axis(Adj, idx, values=0, axis=-1)
 
