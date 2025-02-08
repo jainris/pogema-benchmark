@@ -19,6 +19,7 @@ def add_imitation_dataset_args(parser):
     parser.add_argument("--comm_radius", type=int, default=7)
     parser.add_argument("--batched_saving", type=int, default=None)
     parser.add_argument("--num_neighbour_cutoff", type=int, default=None)
+    parser.add_argument("--neighbour_cutoff_method", type=str, default="closest")
     return parser
 
 
@@ -56,7 +57,7 @@ def get_imitation_dataset_file_name(args):
     if (not load_positions_separately) and use_edge_attr:
         file_name += "_pos"
     if args.num_neighbour_cutoff is not None:
-        file_name += f"_{args.num_neighbour_cutoff}_neighbour_cutoff"
+        file_name += f"_{args.num_neighbour_cutoff}_{args.neighbour_cutoff_method}_neighbour_cutoff"
     if len(file_name) > 0:
         file_name = file_name[1:] + ".pkl"
     else:
@@ -74,6 +75,7 @@ def generate_graph_dataset(
     print_prefix="",
     id_offset=0,
     num_neighbour_cutoff=None,
+    neighbour_cutoff_method=None,
 ):
     dataset_node_features = []
     dataset_Adj = []
@@ -100,7 +102,11 @@ def generate_graph_dataset(
             Adj = Adj - np.diag(np.diag(Adj))
 
             if num_neighbour_cutoff is not None:
-                idx = np.argsort(Adj, axis=-1)
+                if neighbour_cutoff_method == "closest":
+                    idx = np.argsort(Adj, axis=-1)
+                elif neighbour_cutoff_method == "random":
+                    vals = (Adj > 0) * np.random.rand(*Adj.shape)
+                    idx = np.argsort(-vals, axis=-1)
                 idx = idx[:, num_neighbour_cutoff:]
                 np.put_along_axis(Adj, idx, values=0, axis=-1)
 
@@ -183,6 +189,8 @@ def batched_generate_graph_dataset(
     batch_size,
     use_edge_attr=False,
     print_prefix="",
+    num_neighbour_cutoff=None,
+    neighbour_cutoff_method=None,
 ):
     batch_id = 0
     batched_results = None
@@ -202,6 +210,8 @@ def batched_generate_graph_dataset(
             use_edge_attr=use_edge_attr,
             print_prefix=None,
             id_offset=id,
+            num_neighbour_cutoff=num_neighbour_cutoff,
+            neighbour_cutoff_method=neighbour_cutoff_method,
         )
         if batched_results is None:
             batched_results = results
@@ -265,6 +275,8 @@ def main():
             args.num_samples,
             args.save_termination_state,
             args.use_edge_attr,
+            num_neighbour_cutoff=args.num_neighbour_cutoff,
+            neighbour_cutoff_method=args.neighbour_cutoff_method,
         )
 
         file_name = get_imitation_dataset_file_name(args)
@@ -287,6 +299,8 @@ def main():
             dir_path=path,
             batch_size=args.batched_saving,
             use_edge_attr=args.use_edge_attr,
+            num_neighbour_cutoff=args.num_neighbour_cutoff,
+            neighbour_cutoff_method=args.neighbour_cutoff_method,
         )
 
 

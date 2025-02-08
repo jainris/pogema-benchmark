@@ -41,7 +41,11 @@ class BaseRuntimeDataGeneration:
 
 
 def get_graph_dataset_generator(
-    comm_radius, obs_radius, num_neighbour_cutoff, dataset_kwargs
+    comm_radius,
+    obs_radius,
+    num_neighbour_cutoff,
+    neighbour_cutoff_method,
+    dataset_kwargs,
 ):
     def _generator(observations, env):
         return generate_graph_dataset(
@@ -53,6 +57,7 @@ def get_graph_dataset_generator(
             use_edge_attr=dataset_kwargs["use_edge_attr"],
             print_prefix=None,
             num_neighbour_cutoff=num_neighbour_cutoff,
+            neighbour_cutoff_method=neighbour_cutoff_method,
         )
 
     return _generator, "dense_dataset"
@@ -157,7 +162,11 @@ def get_runtime_data_generator(
     )
 
     generator, key = get_graph_dataset_generator(
-        args.comm_radius, args.obs_radius, args.num_neighbour_cutoff, dataset_kwargs
+        args.comm_radius,
+        args.obs_radius,
+        args.num_neighbour_cutoff,
+        args.neighbour_cutoff_method,
+        dataset_kwargs,
     )
     rt_data_generator.register_datagenerator(key, generator)
 
