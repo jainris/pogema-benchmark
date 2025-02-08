@@ -18,6 +18,7 @@ from run_expert import (
 def add_imitation_dataset_args(parser):
     parser.add_argument("--comm_radius", type=int, default=7)
     parser.add_argument("--batched_saving", type=int, default=None)
+    parser.add_argument("--num_neighbour_cutoff", type=int, default=None)
     return parser
 
 
@@ -54,6 +55,8 @@ def get_imitation_dataset_file_name(args):
         file_name += "_pibt_relevance"
     if (not load_positions_separately) and use_edge_attr:
         file_name += "_pos"
+    if args.num_neighbour_cutoff is not None:
+        file_name += f"_{args.num_neighbour_cutoff}_neighbour_cutoff"
     if len(file_name) > 0:
         file_name = file_name[1:] + ".pkl"
     else:
@@ -70,6 +73,7 @@ def generate_graph_dataset(
     use_edge_attr=False,
     print_prefix="",
     id_offset=0,
+    num_neighbour_cutoff=None,
 ):
     dataset_node_features = []
     dataset_Adj = []
@@ -94,6 +98,11 @@ def generate_graph_dataset(
             Adj = Adj * mask
 
             Adj = Adj - np.diag(np.diag(Adj))
+
+            if num_neighbour_cutoff is not None:
+                idx = np.argsort(Adj, axis=-1)
+                idx = idx[:, num_neighbour_cutoff:]
+                np.put_along_axis(Adj, idx, values=0, axis=-1)
 
             if use_edge_attr:
                 dataset_agent_pos.append(global_xys)

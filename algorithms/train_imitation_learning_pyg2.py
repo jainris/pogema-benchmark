@@ -597,6 +597,7 @@ def main():
                         save_termination_state=True,
                         use_edge_attr=dataset_kwargs["use_edge_attr"],
                         print_prefix=None,
+                        num_neighbour_cutoff=args.num_neighbour_cutoff,
                     )
                     if args.use_target_vec is not None:
                         new_oe_target_vec = generate_target_vec(
