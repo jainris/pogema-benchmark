@@ -561,7 +561,7 @@ def main():
                     f"Validation Graph {graph_id - train_id_max}/{validation_id_max - train_id_max}, "
                     f"Current Success Rate: {num_completed / (graph_id - train_id_max + 1)}"
                 )
-            success_rate = num_completed / (graph_id - train_id_max)
+            success_rate = num_completed / (graph_id - train_id_max + 1)
             results = results | {"validation_success_rate": success_rate}
 
             if args.save_intmd_checkpoints:
