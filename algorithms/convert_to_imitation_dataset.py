@@ -178,7 +178,7 @@ def generate_graph_dataset(
             result = (*result, dataset_agent_pos)
         torch_results = []
         for res in result:
-            torch_res = [torch.from_numpy(data) for data in res]
+            torch_res = [torch.from_numpy(np.array(data)) for data in res]
             torch_results.append(torch_res)
         return torch_results
 
