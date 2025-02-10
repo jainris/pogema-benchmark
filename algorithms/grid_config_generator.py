@@ -220,6 +220,8 @@ def grid_config_generator_factory(
                     max_episode_steps=max_episode_steps,
                 )
 
+    elif map_type == "Maze" or map_type == "maze":
+        pass
     else:
         raise ValueError(f"Unsupported map type: {map_type}.")
     return _grid_config_generator

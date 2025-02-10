@@ -725,7 +725,7 @@ def main():
                         print_prefix=None,
                         num_neighbour_cutoff=args.num_neighbour_cutoff,
                         neighbour_cutoff_method=args.neighbour_cutoff_method,
-                        stack_with_np=False,
+                        stack_with_np=args.multiple_robot_densities is None,
                     )
                     if args.use_target_vec is not None:
                         new_oe_target_vec = generate_target_vec(
