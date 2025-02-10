@@ -73,7 +73,7 @@ class MAPFGraphDataset(Dataset):
         ), "Can't use relevances and train for n steps."
 
     def __len__(self) -> int:
-        return self.dataset_node_features.shape[0]
+        return len(self.dataset_node_features)
 
     def __getitem__(self, index):
         edge_index, edge_weight = dense_to_sparse(self.dataset_Adj[index])
@@ -184,7 +184,7 @@ class MAPFHypergraphDataset(Dataset):
         ), "Can't use relevances and train for n steps."
 
     def __len__(self) -> int:
-        return self.dataset_node_features.shape[0]
+        return len(self.dataset_node_features)
 
     def __getitem__(self, index):
         extra_kwargs = dict()

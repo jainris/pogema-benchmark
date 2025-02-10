@@ -740,12 +740,19 @@ def main():
                     if oe_graph_dataset is None:
                         oe_graph_dataset = new_oe_graph_dataset
                     else:
-                        oe_graph_dataset = tuple(
-                            torch.concat(
-                                [oe_graph_dataset[i], new_oe_graph_dataset[i]], dim=0
+                        if args.multiple_robot_densities is None:
+                            oe_graph_dataset = tuple(
+                                torch.concat(
+                                    [oe_graph_dataset[i], new_oe_graph_dataset[i]],
+                                    dim=0,
+                                )
+                                for i in range(len(oe_graph_dataset))
                             )
-                            for i in range(len(oe_graph_dataset))
-                        )
+                        else:
+                            oe_graph_dataset = tuple(
+                                oe_graph_dataset[i] + new_oe_graph_dataset[i]
+                                for i in range(len(oe_graph_dataset))
+                            )
                     if len(oe_relevs) > 0:
                         oe_relevs = np.concatenate(oe_relevs, axis=0)
                         oe_relevs = torch.from_numpy(oe_relevs)
