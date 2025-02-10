@@ -45,6 +45,100 @@ from pibt_training import run_expert_algorithm as run_pibt
 from loss import get_loss_function
 
 
+def _load_datasets(args, hypergraph_model):
+    dense_dataset = None
+    hyper_edge_indices = None
+    target_vecs = None
+    relevances = None
+
+    try:
+        file_name = get_imitation_dataset_file_name(args)
+
+        print("Loading Dataset.............")
+        path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
+
+        with open(path, "rb") as f:
+            dense_dataset = pickle.load(f)
+    except:
+        print(f"Could not find file: {path}, trying legacy file name.")
+        file_name = get_legacy_imitation_dataset_file_name(args)
+
+        print("Loading Dataset.............")
+        path = pathlib.Path(args.dataset_dir, "processed_dataset", file_name)
+
+        with open(path, "rb") as f:
+            dense_dataset = pickle.load(f)
+    if args.load_positions_separately:
+        print("Loading Agent Positions.....")
+        try:
+            file_name = get_pos_file_name(args)
+            path = pathlib.Path(args.dataset_dir, "positions", file_name)
+            with open(path, "rb") as f:
+                agent_pos = pickle.load(f)
+        except:
+            print(f"Could not find file: {path}, trying legacy file name.")
+            file_name = get_legacy_pos_file_name(args)
+            path = pathlib.Path(args.dataset_dir, "positions", file_name)
+            with open(path, "rb") as f:
+                agent_pos = pickle.load(f)
+        dense_dataset = (*dense_dataset, agent_pos)
+    if hypergraph_model:
+        print("Loading Hypergraphs.........")
+        file_name = get_hypergraph_file_name(args)
+        path = pathlib.Path(args.dataset_dir, "hypergraphs", file_name)
+        with open(path, "rb") as f:
+            hyper_edge_indices = pickle.load(f)
+    if args.use_target_vec is not None:
+        print("Loading Target Vecs.........")
+        file_name = get_target_vec_file_name(args)
+        path = pathlib.Path(args.dataset_dir, "target_vec", file_name)
+        with open(path, "rb") as f:
+            target_vecs = pickle.load(f)
+    if args.pibt_expert_relevance_training:
+        print("Loading Relevance Scores....")
+        file_name = get_expert_dataset_file_name(args)
+        path = pathlib.Path(f"{args.dataset_dir}", "pibt_relevance", f"{file_name}")
+        with open(path, "rb") as f:
+            relevances = pickle.load(f)
+        relevances = torch.from_numpy(relevances)
+    return dense_dataset, hyper_edge_indices, target_vecs, relevances
+
+
+def load_datasets(args, hypergraph_model, rds=None, map_id_to_rd_id=None):
+    if rds is not None:
+        datasets = []
+        for rd in rds:
+            args.robot_density = rd
+            datasets.append(_load_datasets(args, hypergraph_model))
+        (comb_hyper_edge_indices, comb_target_vecs, comb_relevances) = ([], [], [])
+        comb_dense_dataset = [[]] * len(datasets[0][0])
+        for i, rd_id in enumerate(map_id_to_rd_id):
+            dense_dataset, hyper_edge_indices, target_vecs, relevances = datasets[rd_id]
+            for j in range(len(dense_dataset)):
+                if dense_dataset[j] is None:
+                    comb_dense_dataset[j] = None
+                else:
+                    comb_dense_dataset[j].append(dense_dataset[j][i])
+            if hyper_edge_indices is not None:
+                comb_hyper_edge_indices.append(hyper_edge_indices[i])
+            if target_vecs is not None:
+                comb_target_vecs.append(target_vecs[i])
+            if relevances is not None:
+                comb_relevances.append(relevances[i])
+        comb_datasets = [
+            comb_dense_dataset,
+            comb_hyper_edge_indices,
+            comb_target_vecs,
+            comb_relevances,
+        ]
+        for i in range(len(comb_datasets)):
+            if len(comb_datasets[i]) == 0:
+                comb_datasets[i] = None
+        return comb_datasets
+    else:
+        return _load_datasets(args, hypergraph_model)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train imitation learning model.")
     parser = add_expert_dataset_args(parser)
@@ -71,10 +165,38 @@ def main():
     else:
         device = torch.device("cpu")
 
-    num_agents = int(args.robot_density * args.map_h * args.map_w)
-
     rng = np.random.default_rng(args.dataset_seed)
     seeds = rng.integers(10**10, size=args.num_samples)
+
+    rds, percs, map_id_to_rd_id = None, None, None
+    num_agents = None
+    if args.multiple_robot_densities is not None:
+        assert (
+            args.robot_density == 0.025
+        ), "Robot Densities should be the default value."
+        multiple_robot_densities = args.multiple_robot_densities.split("+")
+        rds, percs = [], []
+        for rd in multiple_robot_densities:
+            rd, perc = rd.split("=")
+            rds.append(rd)
+            percs.append(perc)
+
+        assert (
+            np.sum(percs) == 1.0
+        ), f"Percentages need to sum to 1.0, but they summed to {np.sum(percs)}."
+        percs = np.cumsum(percs)
+
+        map_id_to_rd_id = np.random.multinomial(n=1, pvals=percs, size=len(seeds))
+        map_id_to_rd_id = np.nonzero(map_id_to_rd_id)[1]
+
+        def _num_agents(map_id):
+            rd_id = map_id_to_rd_id[map_id]
+            rd = rds[rd_id]
+            return int(rd * args.map_h * args.map_w)
+
+    else:
+        num_agents = int(args.robot_density * args.map_h * args.map_w)
+        _num_agents = None
 
     _grid_config_generator = grid_config_generator_factory(
         map_type=args.map_type,
@@ -87,6 +209,7 @@ def main():
         on_target=args.on_target,
         min_dist=args.min_dist,
         max_episode_steps=args.max_episode_steps,
+        num_agents_generator=_num_agents,
     )
 
     grid_config = _grid_config_generator(seeds[0])

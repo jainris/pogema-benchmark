@@ -128,4 +128,6 @@ def add_training_args(parser):
     parser.add_argument("--train_n_steps_weight", type=str, default="1.0")
     parser.add_argument("--fair_compare_n_steps", type=str, default=None)
 
+    parser.add_argument("--multiple_robot_densities", type=str, default=None)
+
     return parser

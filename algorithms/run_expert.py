@@ -65,8 +65,6 @@ def get_expert_dataset_file_name(args):
     file_name = ""
     dict_args = vars(args)
     for key in sorted(DATASET_FILE_NAME_KEYS):
-        if (key == "min_dist") and (dict_args[key] is None):
-            continue
         if dict_args[key] != DATASET_FILE_NAME_DEFAULT[key]:
             file_name += f"_{key}_{dict_args[key]}"
     if args.pibt_expert_relevance_training:
