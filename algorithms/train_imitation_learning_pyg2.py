@@ -178,8 +178,8 @@ def main():
         rds, percs = [], []
         for rd in multiple_robot_densities:
             rd, perc = rd.split("=")
-            rds.append(rd)
-            percs.append(perc)
+            rds.append(float(rd))
+            percs.append(float(perc))
 
         assert (
             np.sum(percs) == 1.0
