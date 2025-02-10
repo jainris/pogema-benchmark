@@ -184,7 +184,6 @@ def main():
         assert (
             np.sum(percs) == 1.0
         ), f"Percentages need to sum to 1.0, but they summed to {np.sum(percs)}."
-        percs = np.cumsum(percs)
 
         map_id_to_rd_id = np.random.multinomial(n=1, pvals=percs, size=len(seeds))
         map_id_to_rd_id = np.nonzero(map_id_to_rd_id)[1]
