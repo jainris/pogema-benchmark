@@ -76,6 +76,7 @@ def generate_graph_dataset(
     id_offset=0,
     num_neighbour_cutoff=None,
     neighbour_cutoff_method=None,
+    stack_with_np=True,
 ):
     dataset_node_features = []
     dataset_Adj = []
@@ -163,11 +164,28 @@ def generate_graph_dataset(
         dataset_target_actions.extend(actions)
         dataset_terminated.extend(terminated)
 
+    graph_map_id = np.array(graph_map_id)
+
+    if not stack_with_np:
+        result = (
+            dataset_node_features,
+            dataset_Adj,
+            dataset_target_actions,
+            dataset_terminated,
+            graph_map_id,
+        )
+        if use_edge_attr:
+            result = (*result, dataset_agent_pos)
+        torch_results = []
+        for res in result:
+            torch_res = [torch.from_numpy(data) for data in res]
+            torch_results.append(torch_res)
+        return torch_results
+
     dataset_node_features = np.stack(dataset_node_features)
     dataset_Adj = np.stack(dataset_Adj)
     dataset_target_actions = np.stack(dataset_target_actions)
     dataset_terminated = np.stack(dataset_terminated)
-    graph_map_id = np.array(graph_map_id)
 
     result = (
         dataset_node_features,
