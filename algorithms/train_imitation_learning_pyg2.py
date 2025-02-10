@@ -211,7 +211,7 @@ def main():
         num_agents_generator=_num_agents,
     )
 
-    grid_config = _grid_config_generator(seeds[0])
+    grid_config = _grid_config_generator(seeds[0], map_id=0)
 
     if args.pibt_expert_relevance_training:
         expert_algorithm, inference_config = get_pibt_alg(args)
@@ -546,7 +546,9 @@ def main():
                 success, env, observations = run_model_on_grid(
                     model=model,
                     device=device,
-                    grid_config=_grid_config_generator(seeds[graph_id]),
+                    grid_config=_grid_config_generator(
+                        seeds[graph_id], map_id=graph_id
+                    ),
                     args=args,
                     dataset_kwargs=dataset_kwargs,
                     hypergraph_model=hypergraph_model,
@@ -605,7 +607,9 @@ def main():
                     if graph_id > train_id_max:
                         grid_config = oe_grid_configs[graph_id - train_id_max]
                     else:
-                        grid_config = _grid_config_generator(seeds[graph_id])
+                        grid_config = _grid_config_generator(
+                            seeds[graph_id], map_id=graph_id
+                        )
                     success, env, observations = run_model_on_grid(
                         model=model,
                         device=device,
