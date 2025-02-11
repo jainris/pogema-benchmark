@@ -327,13 +327,13 @@ class MAPFGPTInferenceNoC2G:
             inputs.append(
                 {
                     "agents": agents_info,
-                    # "cost2go": cost2go.generate_cost2go_obs(
-                    #     self.cost2go_data[obs["global_target_xy"]],
-                    #     obs["global_xy"],
-                    #     self.cfg.cost2go_radius,
-                    #     self.cfg.cost2go_value_limit,
-                    #     self.cfg.mask_cost2go,
-                    # ),
+                    "cost2go": cost2go.generate_cost2go_obs(
+                        self.cost2go_data[obs["global_target_xy"]],
+                        obs["global_xy"],
+                        self.cfg.cost2go_radius,
+                        self.cfg.cost2go_value_limit,
+                        self.cfg.mask_cost2go,
+                    ),
                 }
             )
 

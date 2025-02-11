@@ -130,6 +130,7 @@ def get_expert_algorithm_and_config(args):
         inference_config = MAPFGPTInferenceConfig(
             path_to_weights=f"weights/model-6M-noC2G.pt",
             pibt_collision_shielding=pibt_collision_shielding,
+            mask_cost2go=True,
         )
         expert_algorithm = MAPFGPTInferenceNoC2G
     elif args.expert_algorithm[: len("MAPF-GPT")] == "MAPF-GPT":
