@@ -120,6 +120,14 @@ def get_expert_algorithm_and_config(args):
 
         inference_config = PIBTInferenceConfig()
         expert_algorithm = PIBTDistanceBasedInference
+    elif args.expert_algorithm == "MAPF-GPT-noC2G":
+        from gpt.inference import MAPFGPTInferenceNoC2G, MAPFGPTInferenceConfig
+
+        inference_config = MAPFGPTInferenceConfig(
+            path_to_weights=f"weights/model-6M-noC2G.pt",
+            pibt_collision_shielding=pibt_collision_shielding,
+        )
+        expert_algorithm = MAPFGPTInferenceNoC2G
     elif args.expert_algorithm[: len("MAPF-GPT")] == "MAPF-GPT":
         from gpt.inference import MAPFGPTInference, MAPFGPTInferenceConfig
 
