@@ -124,7 +124,7 @@ def get_expert_algorithm_and_config(args):
         from gpt.inference import MAPFGPTInferenceNoC2G, MAPFGPTInferenceConfig
 
         pibt_collision_shielding = False
-        if args.expert_algorithm == "MAPF-GPT-PIBT":
+        if args.expert_algorithm == "MAPF-GPT-noC2G-PIBT":
             pibt_collision_shielding = True
 
         inference_config = MAPFGPTInferenceConfig(
