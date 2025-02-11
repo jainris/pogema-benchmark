@@ -243,7 +243,7 @@ class MAPFGPTInferenceNoC2G:
             )
         )
 
-        path_to_weights = Path(self.cfg.path_to_weights)
+        path_to_weights = self.cfg.path_to_weights
         url = 'https://drive.google.com/uc?id=1y6J-SqAPQPWV8JciemgxGNyiGQL4oTcj'
         gdown.download(url, path_to_weights, quiet=False)
 
