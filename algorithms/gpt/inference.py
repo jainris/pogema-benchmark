@@ -6,7 +6,6 @@ import torch
 from huggingface_hub import hf_hub_download
 from pogema_toolbox.algorithm_config import AlgoBase
 from pydantic import Extra
-import gdown
 
 from gpt.model import GPT, GPTConfig
 from gpt.tokenizer import cost2go
@@ -223,6 +222,8 @@ class MAPFGPTInference:
 
 class MAPFGPTInferenceNoC2G:
     def __init__(self, cfg: MAPFGPTInferenceConfig, net=None):
+        import gdown
+
         self.cfg: MAPFGPTInferenceConfig = cfg
         self.cost2go_data = None
         self.actions_history = None
